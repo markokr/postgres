@@ -38,6 +38,9 @@
 /* keep debug messages? */
 #define PX_DEBUG
 
+#define PX_ENCRYPT	1
+#define PX_DECRYPT	0
+
 /* a way to disable palloc
  * - useful if compiled into standalone
  */
@@ -161,7 +164,7 @@ struct px_cipher
 	unsigned	(*key_size) (PX_Cipher *c);		/* max key len */
 	unsigned	(*iv_size) (PX_Cipher *c);
 
-	int			(*init) (PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv);
+	int			(*init) (PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc);
 	int			(*encrypt) (PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res);
 	int			(*decrypt) (PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res);
 	void		(*free) (PX_Cipher *c);
@@ -173,7 +176,7 @@ struct px_cipher
 struct px_combo
 {
 	int			(*init) (PX_Combo *cx, const uint8 *key, unsigned klen,
-									 const uint8 *iv, unsigned ivlen);
+									 const uint8 *iv, unsigned ivlen, int enc);
 	int			(*encrypt) (PX_Combo *cx, const uint8 *data, unsigned dlen,
 										uint8 *res, unsigned *rlen);
 	int			(*decrypt) (PX_Combo *cx, const uint8 *data, unsigned dlen,
@@ -229,7 +232,7 @@ void		px_debug(const char *fmt, ...)
 #define px_cipher_key_size(c)		(c)->key_size(c)
 #define px_cipher_block_size(c)		(c)->block_size(c)
 #define px_cipher_iv_size(c)		(c)->iv_size(c)
-#define px_cipher_init(c, k, klen, iv)	(c)->init(c, k, klen, iv)
+#define px_cipher_init(c, k, klen, iv, enc)	(c)->init(c, k, klen, iv, enc)
 #define px_cipher_encrypt(c, data, dlen, res) \
 					(c)->encrypt(c, data, dlen, res)
 #define px_cipher_decrypt(c, data, dlen, res) \
@@ -239,8 +242,8 @@ void		px_debug(const char *fmt, ...)
 
 #define px_combo_encrypt_len(c, dlen)	(c)->encrypt_len(c, dlen)
 #define px_combo_decrypt_len(c, dlen)	(c)->decrypt_len(c, dlen)
-#define px_combo_init(c, key, klen, iv, ivlen) \
-					(c)->init(c, key, klen, iv, ivlen)
+#define px_combo_init(c, key, klen, iv, ivlen, enc) \
+					(c)->init(c, key, klen, iv, ivlen, enc)
 #define px_combo_encrypt(c, data, dlen, res, rlen) \
 					(c)->encrypt(c, data, dlen, res, rlen)
 #define px_combo_decrypt(c, data, dlen, res, rlen) \

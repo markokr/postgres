@@ -61,7 +61,7 @@ pgp_cfb_create(PGP_CFB **ctx_p, int algo, const uint8 *key, int key_len,
 	if (res < 0)
 		return res;
 
-	res = px_cipher_init(ciph, key, key_len, NULL);
+	res = px_cipher_init(ciph, key, key_len, NULL, PX_ENCRYPT);
 	if (res < 0)
 	{
 		px_cipher_free(ciph);
