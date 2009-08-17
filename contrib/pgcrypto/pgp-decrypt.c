@@ -214,7 +214,7 @@ pktreader_free(void *priv)
 	px_free(pkt);
 }
 
-static struct PullFilterOps pktreader_filter = {
+static const struct PullFilterOps pktreader_filter = {
 	NULL, pktreader_pull, pktreader_free
 };
 
@@ -284,7 +284,7 @@ prefix_init(void **priv_p, void *arg, PullFilter *src)
 	return 0;
 }
 
-static struct PullFilterOps prefix_filter = {
+static const struct PullFilterOps prefix_filter = {
 	prefix_init, NULL, NULL
 };
 
@@ -321,7 +321,7 @@ decrypt_read(void *priv, PullFilter *src, int len,
 	return res;
 }
 
-struct PullFilterOps pgp_decrypt_filter = {
+const struct PullFilterOps pgp_decrypt_filter = {
 	decrypt_init, decrypt_read, NULL
 };
 
@@ -433,7 +433,7 @@ mdc_read(void *priv, PullFilter *src, int len,
 	return res;
 }
 
-static struct PullFilterOps mdc_filter = {
+static const struct PullFilterOps mdc_filter = {
 	mdc_init, mdc_read, mdc_free
 };
 
@@ -597,7 +597,7 @@ mdcbuf_free(void *priv)
 	px_free(st);
 }
 
-static struct PullFilterOps mdcbuf_filter = {
+static const struct PullFilterOps mdcbuf_filter = {
 	mdcbuf_init, mdcbuf_read, mdcbuf_free
 };
 
