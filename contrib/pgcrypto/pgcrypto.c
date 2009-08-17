@@ -237,7 +237,7 @@ pg_encrypt(PG_FUNCTION_ARGS)
 	rlen = px_combo_encrypt_len(c, dlen);
 	res = palloc(VARHDRSZ + rlen);
 
-	err = px_combo_init(c, (uint8 *) VARDATA(key), klen, NULL, 0);
+	err = px_combo_init(c, (uint8 *) VARDATA(key), klen, NULL, 0, PX_ENCRYPT);
 	if (!err)
 		err = px_combo_encrypt(c, (uint8 *) VARDATA(data), dlen,
 							   (uint8 *) VARDATA(res), &rlen);
@@ -286,7 +286,7 @@ pg_decrypt(PG_FUNCTION_ARGS)
 	rlen = px_combo_decrypt_len(c, dlen);
 	res = palloc(VARHDRSZ + rlen);
 
-	err = px_combo_init(c, (uint8 *) VARDATA(key), klen, NULL, 0);
+	err = px_combo_init(c, (uint8 *) VARDATA(key), klen, NULL, 0, PX_DECRYPT);
 	if (!err)
 		err = px_combo_decrypt(c, (uint8 *) VARDATA(data), dlen,
 							   (uint8 *) VARDATA(res), &rlen);
@@ -339,7 +339,7 @@ pg_encrypt_iv(PG_FUNCTION_ARGS)
 	res = palloc(VARHDRSZ + rlen);
 
 	err = px_combo_init(c, (uint8 *) VARDATA(key), klen,
-						(uint8 *) VARDATA(iv), ivlen);
+						(uint8 *) VARDATA(iv), ivlen, PX_ENCRYPT);
 	if (!err)
 		px_combo_encrypt(c, (uint8 *) VARDATA(data), dlen,
 						 (uint8 *) VARDATA(res), &rlen);
@@ -393,7 +393,7 @@ pg_decrypt_iv(PG_FUNCTION_ARGS)
 	res = palloc(VARHDRSZ + rlen);
 
 	err = px_combo_init(c, (uint8 *) VARDATA(key), klen,
-						(uint8 *) VARDATA(iv), ivlen);
+						(uint8 *) VARDATA(iv), ivlen, PX_DECRYPT);
 	if (!err)
 		px_combo_decrypt(c, (uint8 *) VARDATA(data), dlen,
 						 (uint8 *) VARDATA(res), &rlen);

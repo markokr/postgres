@@ -159,7 +159,7 @@ combo_decrypt_len(PX_Combo *cx, unsigned dlen)
 
 static int
 combo_init(PX_Combo *cx, const uint8 *key, unsigned klen,
-		   const uint8 *iv, unsigned ivlen)
+		   const uint8 *iv, unsigned ivlen, int enc)
 {
 	int			err;
 	unsigned	ks,
@@ -187,7 +187,7 @@ combo_init(PX_Combo *cx, const uint8 *key, unsigned klen,
 	memset(keybuf, 0, ks);
 	memcpy(keybuf, key, klen);
 
-	err = px_cipher_init(c, keybuf, klen, ivbuf);
+	err = px_cipher_init(c, keybuf, klen, ivbuf, enc);
 
 	if (ivbuf)
 		px_free(ivbuf);

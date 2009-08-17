@@ -310,7 +310,7 @@ px_find_digest(const char *name, PX_MD **res)
 
 struct ossl_cipher
 {
-	int			(*init) (PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv);
+	int			(*init) (PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc);
 	int			(*encrypt) (PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res);
 	int			(*decrypt) (PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res);
 
@@ -341,10 +341,7 @@ typedef struct
 		CAST_KEY	cast_key;
 		AES_KEY		aes_key;
 	}			u;
-	uint8		key[MAX_KEY];
 	uint8		iv[MAX_IV];
-	unsigned	klen;
-	unsigned	init;
 	const struct ossl_cipher *ciph;
 } ossldata;
 
@@ -422,7 +419,7 @@ bf_check_supported_key_len(void)
 }
 
 static int
-bf_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+bf_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	ossldata   *od = c->ptr;
 	static int	bf_is_strong = -1;
@@ -514,7 +511,7 @@ bf_cfb64_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res)
 /* DES */
 
 static int
-ossl_des_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+ossl_des_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	ossldata   *od = c->ptr;
 	DES_cblock	xkey;
@@ -586,7 +583,7 @@ ossl_des_cbc_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 /* DES3 */
 
 static int
-ossl_des3_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+ossl_des3_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	ossldata   *od = c->ptr;
 	DES_cblock	xkey1,
@@ -671,7 +668,7 @@ ossl_des3_cbc_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 /* CAST5 */
 
 static int
-ossl_cast_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+ossl_cast_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	ossldata   *od = c->ptr;
 	unsigned	bs = gen_ossl_block_size(c);
@@ -729,21 +726,32 @@ ossl_cast_cbc_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res
 /* AES */
 
 static int
-ossl_aes_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+ossl_aes_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	ossldata   *od = c->ptr;
 	unsigned	bs = gen_ossl_block_size(c);
+	uint8		keybuf[256/8];
+	unsigned	bits;
+	int			err;
 
 	if (klen <= 128 / 8)
-		od->klen = 128 / 8;
+		bits = 128;
 	else if (klen <= 192 / 8)
-		od->klen = 192 / 8;
+		bits = 192;
 	else if (klen <= 256 / 8)
-		od->klen = 256 / 8;
+		bits = 256;
 	else
 		return PXE_KEY_TOO_BIG;
 
-	memcpy(od->key, key, klen);
+	memset(keybuf, 0, sizeof(keybuf));
+	memcpy(keybuf, key, klen);
+	if (enc)
+		err = AES_set_encrypt_key(keybuf, bits, &od->u.aes_key);
+	else
+		err = AES_set_decrypt_key(keybuf, bits, &od->u.aes_key);
+	memset(keybuf, 0, sizeof(keybuf));
+	if (err)
+		return PXE_KEY_TOO_BIG;
 
 	if (iv)
 		memcpy(od->iv, iv, bs);
@@ -753,40 +761,12 @@ ossl_aes_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
 }
 
 static int
-ossl_aes_key_init(ossldata *od, int type)
-{
-	int			err;
-
-	/*
-	 * Strong key support could be missing on some openssl installations. We
-	 * must check return value from set key function.
-	 */
-	if (type == AES_ENCRYPT)
-		err = AES_set_encrypt_key(od->key, od->klen * 8, &od->u.aes_key);
-	else
-		err = AES_set_decrypt_key(od->key, od->klen * 8, &od->u.aes_key);
-
-	if (err == 0)
-	{
-		od->init = 1;
-		return 0;
-	}
-	od->init = 0;
-	return PXE_KEY_TOO_BIG;
-}
-
-static int
 ossl_aes_ecb_encrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 					 uint8 *res)
 {
 	unsigned	bs = gen_ossl_block_size(c);
 	ossldata   *od = c->ptr;
 	const uint8 *end = data + dlen - bs;
-	int			err;
-
-	if (!od->init)
-		if ((err = ossl_aes_key_init(od, AES_ENCRYPT)) != 0)
-			return err;
 
 	for (; data <= end; data += bs, res += bs)
 		AES_ecb_encrypt(data, res, &od->u.aes_key, AES_ENCRYPT);
@@ -800,11 +780,6 @@ ossl_aes_ecb_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 	unsigned	bs = gen_ossl_block_size(c);
 	ossldata   *od = c->ptr;
 	const uint8 *end = data + dlen - bs;
-	int			err;
-
-	if (!od->init)
-		if ((err = ossl_aes_key_init(od, AES_DECRYPT)) != 0)
-			return err;
 
 	for (; data <= end; data += bs, res += bs)
 		AES_ecb_encrypt(data, res, &od->u.aes_key, AES_DECRYPT);
@@ -816,11 +791,6 @@ ossl_aes_cbc_encrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 					 uint8 *res)
 {
 	ossldata   *od = c->ptr;
-	int			err;
-
-	if (!od->init)
-		if ((err = ossl_aes_key_init(od, AES_ENCRYPT)) != 0)
-			return err;
 
 	AES_cbc_encrypt(data, res, dlen, &od->u.aes_key, od->iv, AES_ENCRYPT);
 	return 0;
@@ -831,11 +801,6 @@ ossl_aes_cbc_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen,
 					 uint8 *res)
 {
 	ossldata   *od = c->ptr;
-	int			err;
-
-	if (!od->init)
-		if ((err = ossl_aes_key_init(od, AES_DECRYPT)) != 0)
-			return err;
 
 	AES_cbc_encrypt(data, res, dlen, &od->u.aes_key, od->iv, AES_DECRYPT);
 	return 0;

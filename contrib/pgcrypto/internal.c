@@ -246,15 +246,12 @@ init_sha1(PX_MD *md)
 
 struct int_ctx
 {
-	uint8		keybuf[INT_MAX_KEY];
 	uint8		iv[INT_MAX_IV];
 	union
 	{
 		BlowfishContext bf;
 		rijndael_ctx rj;
 	}			ctx;
-	unsigned	keylen;
-	int			is_init;
 	int			mode;
 };
 
@@ -297,20 +294,25 @@ rj_iv_size(PX_Cipher *c)
 }
 
 static int
-rj_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+rj_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	struct int_ctx *cx = (struct int_ctx *) c->ptr;
+	uint8		keybuf[INT_MAX_KEY];
+	unsigned bits;
 
 	if (klen <= 128 / 8)
-		cx->keylen = 128 / 8;
+		bits = 128;
 	else if (klen <= 192 / 8)
-		cx->keylen = 192 / 8;
+		bits = 192;
 	else if (klen <= 256 / 8)
-		cx->keylen = 256 / 8;
+		bits = 256;
 	else
 		return PXE_KEY_TOO_BIG;
 
-	memcpy(&cx->keybuf, key, klen);
+	memset(keybuf, 0, sizeof(keybuf));
+	memcpy(keybuf, key, klen);
+	aes_set_key(&cx->ctx.rj, keybuf, bits, enc);
+	memset(keybuf, 0, sizeof(keybuf));
 
 	if (iv)
 		memcpy(cx->iv, iv, 128 / 8);
@@ -319,22 +321,9 @@ rj_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
 }
 
 static int
-rj_real_init(struct int_ctx * cx, int dir)
-{
-	aes_set_key(&cx->ctx.rj, cx->keybuf, cx->keylen * 8, dir);
-	return 0;
-}
-
-static int
 rj_encrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res)
 {
 	struct int_ctx *cx = (struct int_ctx *) c->ptr;
-
-	if (!cx->is_init)
-	{
-		if (rj_real_init(cx, 1))
-			return PXE_CIPHER_INIT;
-	}
 
 	if (dlen == 0)
 		return 0;
@@ -359,10 +348,6 @@ static int
 rj_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res)
 {
 	struct int_ctx *cx = (struct int_ctx *) c->ptr;
-
-	if (!cx->is_init)
-		if (rj_real_init(cx, 0))
-			return PXE_CIPHER_INIT;
 
 	if (dlen == 0)
 		return 0;
@@ -435,7 +420,7 @@ bf_iv_size(PX_Cipher *c)
 }
 
 static int
-bf_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv)
+bf_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
 {
 	struct int_ctx *cx = (struct int_ctx *) c->ptr;
 
