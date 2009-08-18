@@ -87,6 +87,10 @@ static const struct cipher_info cipher_list[] = {
 	{"aes192", PGP_SYM_AES_192, "aes-ecb", 192 / 8, 128 / 8},
 	{"aes256", PGP_SYM_AES_256, "aes-ecb", 256 / 8, 128 / 8},
 	{"twofish", PGP_SYM_TWOFISH, "twofish-ecb", 256 / 8, 128 / 8},
+	{"camellia", PGP_SYM_CAMELLIA_128, "camellia-ecb", 128 / 8, 128 / 8},
+	{"camellia128", PGP_SYM_CAMELLIA_128, "camellia-ecb", 128 / 8, 128 / 8},
+	{"camellia192", PGP_SYM_CAMELLIA_192, "camellia-ecb", 192 / 8, 128 / 8},
+	{"camellia256", PGP_SYM_CAMELLIA_256, "camellia-ecb", 256 / 8, 128 / 8},
 	{NULL, 0, NULL}
 };
 

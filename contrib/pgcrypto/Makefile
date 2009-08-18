@@ -35,6 +35,9 @@ REGRESS = init md5 sha1 hmac-md5 hmac-sha1 hmac-otp blowfish rijndael \
 	pgp-armor pgp-decrypt pgp-encrypt $(CF_PGP_TESTS) \
 	pgp-pubkey-decrypt pgp-pubkey-encrypt pgp-info
 
+# camellia works only on OpenSSL 1.0+
+#REGRESS += pgp-camellia
+
 EXTRA_CLEAN = gen-rtab
 
 ifdef USE_PGXS
