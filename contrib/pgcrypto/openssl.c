@@ -339,6 +339,30 @@ init_aes(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc
 	return gen_ossl_init(c, key, klen, iv, enc);
 }
 
+/* OpenSSL has split Camellia to 3 ciphers */
+static int
+init_camellia(PX_Cipher * c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
+{
+	OSSLContext *octx = c->ptr;
+	const char *name;
+	int cbc = octx->info->mode == EVP_CIPH_CBC_MODE;
+
+	if (klen <= 128/8)
+		name = cbc ? "camellia-128-cbc" : "camellia-128-ecb";
+	else if (klen <= 192/8)
+		name = cbc ? "camellia-192-cbc" : "camellia-192-ecb";
+	else if (klen <= 256/8)
+		name = cbc ? "camellia-256-cbc" : "camellia-256-ecb";
+	else
+		return PXE_KEY_TOO_BIG;
+
+	octx->ciph = EVP_get_cipherbyname(name);
+	if (!octx->ciph)
+		return PXE_NO_CIPHER;
+
+	return gen_ossl_init(c, key, klen, iv, enc);
+}
+
 /* EVP does not know des3_ecb */
 static int
 init_des3_ecb(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
@@ -374,6 +398,7 @@ static const PX_Alias ossl_aliases[] = {
 	{"rijndael", "aes-cbc"},
 	{"rijndael-cbc", "aes-cbc"},
 	{"rijndael-ecb", "aes-ecb"},
+	{"camellia", "camellia-cbc"},
 	{NULL}
 };
 
@@ -388,6 +413,8 @@ static const struct OSSLInfo info_list[] = {
 	{ "des-ede3-cbc", EVP_CIPH_CBC_MODE, 192/8, 64/8 },
 	{ "cast5-ecb", EVP_CIPH_ECB_MODE, 128/8, 64/8 },
 	{ "cast5-cbc", EVP_CIPH_CBC_MODE, 128/8, 64/8 },
+	{ "camellia-ecb", EVP_CIPH_ECB_MODE, 256/8, 128/8, init_camellia },
+	{ "camellia-cbc", EVP_CIPH_CBC_MODE, 256/8, 128/8, init_camellia },
 	{ NULL },
 };
 
