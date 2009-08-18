@@ -139,6 +139,20 @@ hmac(data bytea, key text, type text) returns bytea
     </thead>
     <tbody>
      <row>
+      <entry><literal>sha512</></entry>
+      <entry>Unlimited</entry>
+      <entry>yes</entry>
+      <entry>128</entry>
+      <entry>SHA512-based</entry>
+     </row>
+     <row>
+      <entry><literal>sha256</></entry>
+      <entry>Unlimited</entry>
+      <entry>yes</entry>
+      <entry>128</entry>
+      <entry>SHA256-based</entry>
+     </row>
+     <row>
       <entry><literal>bf</></entry>
       <entry>72</entry>
       <entry>yes</entry>
@@ -252,6 +266,18 @@ gen_salt(type text [, iter_count integer ]) returns text
        <entry>6</entry>
        <entry>4</entry>
        <entry>31</entry>
+      </row>
+      <row>
+       <entry><literal>sha256</></entry>
+       <entry>5000</entry>
+       <entry>1000</entry>
+       <entry>999999999</entry>
+      </row>
+      <row>
+       <entry><literal>sha512</></entry>
+       <entry>5000</entry>
+       <entry>1000</entry>
+       <entry>999999999</entry>
       </row>
      </tbody>
     </tgroup>

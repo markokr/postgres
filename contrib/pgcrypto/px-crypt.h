@@ -64,6 +64,10 @@ char *_crypt_gensalt_md5_rn(unsigned long count,
 				 const char *input, int size, char *output, int output_size);
 char *_crypt_gensalt_blowfish_rn(unsigned long count,
 				 const char *input, int size, char *output, int output_size);
+char *_crypt_gensalt_sha256_rn(unsigned long count,
+				  const char *input, int size, char *output, int output_size);
+char *_crypt_gensalt_sha512_rn(unsigned long count,
+				  const char *input, int size, char *output, int output_size);
 
 /* disable 'extended DES crypt' */
 /* #define DISABLE_XDES */
@@ -78,5 +82,8 @@ char	   *px_crypt_des(const char *key, const char *setting);
 /* crypt-md5.c */
 char *px_crypt_md5(const char *pw, const char *salt,
 			 char *dst, unsigned dstlen);
+
+/* crypt-sha2.c */
+char *px_crypt_sha2_r(const char *key, const char *salt, char *buffer, int buflen);
 
 #endif   /* _PX_CRYPT_H */
