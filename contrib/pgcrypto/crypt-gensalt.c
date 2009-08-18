@@ -185,3 +185,53 @@ _crypt_gensalt_blowfish_rn(unsigned long count,
 
 	return output;
 }
+
+static char *
+gensalt_sha(unsigned long count, int algo_id,
+			const char *input, int size, char *output, int output_size)
+{
+	char *p;
+	if (algo_id != 5 && algo_id != 6)
+		return NULL;
+
+	if (size < 12 || output_size < 128 ||
+		(count && (count < 1000 || count > 999999999)))
+	{
+		if (output_size > 0)
+			output[0] = '\0';
+		return NULL;
+	}
+
+	if (count <= 0)
+		count = 5000;
+	else if (count < 1000)
+		count = 1000;
+	else if (count > 999999999)
+		count = 999999999;
+
+	if (count != 5000)
+		snprintf(output, output_size, "$%d$rounds=%lu$", algo_id, count);
+	else
+		snprintf(output, output_size, "$%d$", algo_id);
+	p = output + strlen(output);
+
+	BF_encode(p, (BF_word *) input, 12);
+	p[16] = '\0';
+
+	return output;
+}
+
+char *
+_crypt_gensalt_sha256_rn(unsigned long count, const char *input, int size,
+						 char *output, int output_size)
+{
+	return gensalt_sha(count, 5, input, size, output, output_size);
+}
+
+char *
+_crypt_gensalt_sha512_rn(unsigned long count, const char *input, int size,
+						 char *output, int output_size)
+{
+	return gensalt_sha(count, 6, input, size, output, output_size);
+}
+

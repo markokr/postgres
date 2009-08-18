@@ -16,7 +16,7 @@ CF_PGP_TESTS = $(if $(subst no,,$(with_zlib)), $(ZLIB_TST), $(ZLIB_OFF_TST))
 
 SRCS		= pgcrypto.c px.c px-hmac.c px-crypt.c \
 		crypt-gensalt.c crypt-blowfish.c crypt-des.c \
-		crypt-md5.c $(CF_SRCS) \
+		crypt-md5.c crypt-sha.c $(CF_SRCS) \
 		mbuf.c pgp.c pgp-armor.c pgp-cfb.c pgp-compress.c \
 		pgp-decrypt.c pgp-encrypt.c pgp-info.c pgp-mpi.c \
 		pgp-pubdec.c pgp-pubenc.c pgp-pubkey.c pgp-s2k.c \
@@ -30,7 +30,7 @@ DATA = pgcrypto--1.0.sql pgcrypto--unpackaged--1.0.sql
 
 REGRESS = init md5 sha1 hmac-md5 hmac-sha1 blowfish rijndael \
 	$(CF_TESTS) \
-	crypt-des crypt-md5 crypt-blowfish crypt-xdes \
+	crypt-des crypt-md5 crypt-blowfish crypt-xdes crypt-sha \
 	pgp-armor pgp-decrypt pgp-encrypt $(CF_PGP_TESTS) \
 	pgp-pubkey-decrypt pgp-pubkey-encrypt pgp-info
 
