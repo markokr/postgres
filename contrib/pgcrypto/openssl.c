@@ -482,6 +482,9 @@ px_get_pseudo_random_bytes(uint8 *dst, unsigned count)
 int
 px_add_entropy(const uint8 *data, unsigned count)
 {
+	if (!openssl_random_init)
+		init_openssl_rand();
+
 	/*
 	 * estimate 0 bits
 	 */
