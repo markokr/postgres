@@ -37,7 +37,7 @@
 #include "pgp.h"
 
 static mpz_t *
-mp_new()
+mp_new(void)
 {
 	mpz_t	   *mp = mp_int_alloc();
 
