@@ -51,24 +51,6 @@
  */
 
 /*
- * There is some confusion about whether and how to carry forward
- * the state of the pools.	Seems like original Fortuna does not
- * do it, resetting hash after each request.  I guess expecting
- * feeding to happen more often that requesting.   This is absolutely
- * unsuitable for pgcrypto, as nothing asynchronous happens here.
- *
- * J.L. Cooke fixed this by feeding previous hash to new re-initialized
- * hash context.
- *
- * Fortuna predecessor Yarrow requires ability to query intermediate
- * 'final result' from hash, without affecting it.
- *
- * This implementation uses the Yarrow method - asking intermediate
- * results, but continuing with old state.
- */
-
-
-/*
  * Algorithm parameters
  */
 
@@ -124,15 +106,13 @@ struct fortuna_state
 	unsigned	reseed_count;
 	struct timeval last_reseed_time;
 	unsigned	pool0_bytes;
-	unsigned	rnd_pos;
-	int			tricks_done;
+	unsigned	pool_pos;
 };
 typedef struct fortuna_state FState;
 
 
 /*
  * Use our own wrappers here.
- * - Need to get intermediate result from digest, without affecting it.
  * - Need re-set key on a cipher context.
  * - Algorithms are guaranteed to exist.
  * - No memory allocations.
@@ -165,11 +145,8 @@ md_update(MD_CTX * ctx, const uint8 *data, int len)
 static void
 md_result(MD_CTX * ctx, uint8 *dst)
 {
-	SHA256_CTX	tmp;
-
-	memcpy(&tmp, ctx, sizeof(*ctx));
-	SHA256_Final(dst, &tmp);
-	memset(&tmp, 0, sizeof(tmp));
+	SHA256_Final(dst, ctx);
+	SHA256_Init(ctx);
 }
 
 /*
@@ -295,26 +272,6 @@ reseed(FState *st)
 }
 
 /*
- * Pick a random pool.	This uses key bytes as random source.
- */
-static unsigned
-get_rand_pool(FState *st)
-{
-	unsigned	rnd;
-
-	/*
-	 * This slightly prefers lower pools - thats OK.
-	 */
-	rnd = st->key[st->rnd_pos] % NUM_POOLS;
-
-	st->rnd_pos++;
-	if (st->rnd_pos >= BLOCK)
-		st->rnd_pos = 0;
-
-	return rnd;
-}
-
-/*
  * update pools
  */
 static void
@@ -330,12 +287,12 @@ add_entropy(FState *st, const uint8 *data, unsigned len)
 	md_result(&md, hash);
 
 	/*
-	 * Make sure the pool 0 is initialized, then update randomly.
+	 * Fill pools sequentially.
 	 */
-	if (st->reseed_count == 0)
-		pos = 0;
-	else
-		pos = get_rand_pool(st);
+	pos = st->pool_pos++;
+	if (st->pool_pos >= NUM_POOLS)
+		st->pool_pos = 0;
+
 	md_update(&st->pool[pos], hash, BLOCK);
 
 	if (pos == 0)
@@ -356,37 +313,6 @@ rekey(FState *st)
 	ciph_init(&st->ciph, st->key, BLOCK);
 }
 
-/*
- * Hide public constants. (counter, pools > 0)
- *
- * This can also be viewed as spreading the startup
- * entropy over all of the components.
- */
-static void
-startup_tricks(FState *st)
-{
-	int			i;
-	uint8		buf[BLOCK];
-
-	/* Use next block as counter. */
-	encrypt_counter(st, st->counter);
-
-	/* Now shuffle pools, excluding #0 */
-	for (i = 1; i < NUM_POOLS; i++)
-	{
-		encrypt_counter(st, buf);
-		encrypt_counter(st, buf + CIPH_BLOCK);
-		md_update(&st->pool[i], buf, BLOCK);
-	}
-	memset(buf, 0, BLOCK);
-
-	/* Hide the key. */
-	rekey(st);
-
-	/* This can be done only once. */
-	st->tricks_done = 1;
-}
-
 static void
 extract_data(FState *st, unsigned count, uint8 *dst)
 {
@@ -397,10 +323,6 @@ extract_data(FState *st, unsigned count, uint8 *dst)
 	if (st->pool0_bytes >= POOL0_FILL || st->reseed_count == 0)
 		if (enough_time_passed(st))
 			reseed(st);
-
-	/* Do some randomization on first call */
-	if (!st->tricks_done)
-		startup_tricks(st);
 
 	while (count > 0)
 	{
