@@ -1,0 +1,326 @@
+--
+-- PBKDF2-SHA1 test vectors from RFC6070
+--
+-- 0c 60 c8 0f 96 1f 0e 71 f3 a9 b5 24 af 60 12 06 2f e0 37 a6 
+select encode(string2key('pbkdf2-sha1', 'password', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 0c60c80f961f0e71f3a9b524af6012062fe037a6
+(1 row)
+
+-- ea 6c 01 4d c7 2d 6f 8c cd 1e d9 2a ce 1d 41 f0 d8 de 89 57  
+select encode(string2key('pbkdf2-sha1', 'password', 'salt', 2, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957
+(1 row)
+
+-- 4b 00 79 01 b7 65 48 9a be ad 49 d9 26 f7 21 d0 65 a4 29 c1
+select encode(string2key('pbkdf2-sha1', 'password', 'salt', 4096, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 4b007901b765489abead49d926f721d065a429c1
+(1 row)
+
+-- ee fe 3d 61 cd 4d a4 e4 e9 94 5b 3d 6b a2 15 8c 26 34 e9 84 
+-- select encode(string2key('pbkdf2-sha1', 'password', 'salt', 16777216, 20), 'hex') as s2k;
+-- 3d 2e ec 4f e4 1c 84 9b 80 c8 d8 36 62 c0 e4 4a 8b 29 1a 96 4c f2 f0 70 38   
+select encode(string2key('pbkdf2-sha1', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 25), 'hex') as s2k;
+                        s2k                         
+----------------------------------------------------
+ 3d2eec4fe41c849b80c8d83662c0e44a8b291a964cf2f07038
+(1 row)
+
+-- 56 fa 6a a7 55 48 09 9d cc 37 d7 f0 34 25 e0 c3 
+select encode(string2key('pbkdf2-sha1', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 56fa6aa75548099dcc37d7f03425e0c3
+(1 row)
+
+-- weird params
+select encode(string2key('pbkdf2-sha1', 'password', '', 1, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ 8754c32c64b0f524fc50c00f788135de2d2dd767a414b9cd7d5203200b0377cd
+(1 row)
+
+select encode(string2key('pbkdf2-sha1', '', 'salt', 1, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ a33dddc30478185515311f8752895d36ea4363a2000d3d26b98e7dffaaa13c3c
+(1 row)
+
+select encode(string2key('pbkdf2-sha1', '', '', 1, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ 1e437a1c79d75be61e91141dae20affc4892cc99abcc3fe753887bccc8920176
+(1 row)
+
+select encode(string2key('pbkdf2', 'password', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 0c60c80f961f0e71f3a9b524af6012062fe037a6
+(1 row)
+
+-- other algos
+select encode(string2key('pbkdf2-md5', 'password', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ f31afb6d931392daa5e3130f47f9a9b6e8e72029
+(1 row)
+
+select encode(string2key('pbkdf2-md5', 'password', 'salt', 2, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 042407b552be345ad6eee2cf2f7ed01dd9662d8f
+(1 row)
+
+select encode(string2key('pbkdf2-md5', 'password', 'salt', 4096, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 15001f89b9c29ee6998c520d1a0629e893cc3f99
+(1 row)
+
+select encode(string2key('pbkdf2-md5', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 25), 'hex') as s2k;
+                        s2k                         
+----------------------------------------------------
+ 8d5d0aad94d14420429fbc7e5b087d7a5527e65dfd0d486a31
+(1 row)
+
+select encode(string2key('pbkdf2-md5', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 9d35f8f9b26aa9a8aa39276634c6793a
+(1 row)
+
+select encode(string2key('pbkdf2-sha224', 'password', 'salt', 1, 28), 'hex') as s2k;
+                           s2k                            
+----------------------------------------------------------
+ 3c198cbdb9464b7857966bd05b7bc92bc1cc4e6e63155d4e490557fd
+(1 row)
+
+select encode(string2key('pbkdf2-sha224', 'password', 'salt', 2, 28), 'hex') as s2k;
+                           s2k                            
+----------------------------------------------------------
+ 93200ffa96c5776d38fa10abdf8f5bfc0054b9718513df472d2331d2
+(1 row)
+
+select encode(string2key('pbkdf2-sha224', 'password', 'salt', 4096, 28), 'hex') as s2k;
+                           s2k                            
+----------------------------------------------------------
+ 218c453bf90635bd0a21a75d172703ff6108ef603f65bb821aedade1
+(1 row)
+
+select encode(string2key('pbkdf2-sha224', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 35), 'hex') as s2k;
+                                  s2k                                   
+------------------------------------------------------------------------
+ 056c4ba438ded91fc14e0594e6f52b87e1f3690c0dc0fbc05784ed9a754ca780e6c017
+(1 row)
+
+select encode(string2key('pbkdf2-sha224', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 9b4011b641f40a2a500a31d4a392d15c
+(1 row)
+
+select encode(string2key('pbkdf2-sha256', 'password', 'salt', 1, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ 120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b
+(1 row)
+
+select encode(string2key('pbkdf2-sha256', 'password', 'salt', 2, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43
+(1 row)
+
+select encode(string2key('pbkdf2-sha256', 'password', 'salt', 4096, 32), 'hex') as s2k;
+                               s2k                                
+------------------------------------------------------------------
+ c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a
+(1 row)
+
+select encode(string2key('pbkdf2-sha256', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 45), 'hex') as s2k;
+                                            s2k                                             
+--------------------------------------------------------------------------------------------
+ 348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c4e2a1fb8dd53e1c635518c7dac47e94561f26860
+(1 row)
+
+select encode(string2key('pbkdf2-sha256', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 89b69d0516f829893c696226650a8687
+(1 row)
+
+select encode(string2key('pbkdf2-sha384', 'password', 'salt', 1, 48), 'hex') as s2k;
+                                               s2k                                                
+--------------------------------------------------------------------------------------------------
+ c0e14f06e49e32d73f9f52ddf1d0c5c7191609233631dadd76a567db42b78676b38fc800cc53ddb642f5c74442e62be4
+(1 row)
+
+select encode(string2key('pbkdf2-sha384', 'password', 'salt', 2, 48), 'hex') as s2k;
+                                               s2k                                                
+--------------------------------------------------------------------------------------------------
+ 54f775c6d790f21930459162fc535dbf04a939185127016a04176a0730c6f1f4fb48832ad1261baadd2cedd50814b1c8
+(1 row)
+
+select encode(string2key('pbkdf2-sha384', 'password', 'salt', 4096, 48), 'hex') as s2k;
+                                               s2k                                                
+--------------------------------------------------------------------------------------------------
+ 559726be38db125bc85ed7895f6e3cf574c7a01c080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626
+(1 row)
+
+select encode(string2key('pbkdf2-sha384', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 64), 'hex') as s2k;
+                                                               s2k                                                                
+----------------------------------------------------------------------------------------------------------------------------------
+ 819143ad66df9a552559b9e131c52ae6c5c1b0eed18f4d283b8c5c9eaeb92b392c147cc2d2869d58ffe2f7da13d15f8d925721f0ed1afafa24480d55cf6060b1
+(1 row)
+
+select encode(string2key('pbkdf2-sha384', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ a3f00ac8657e095f8e0823d232fc60b3
+(1 row)
+
+select encode(string2key('pbkdf2-sha512', 'password', 'salt', 1, 64), 'hex') as s2k;
+                                                               s2k                                                                
+----------------------------------------------------------------------------------------------------------------------------------
+ 867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5d513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce
+(1 row)
+
+select encode(string2key('pbkdf2-sha512', 'password', 'salt', 2, 64), 'hex') as s2k;
+                                                               s2k                                                                
+----------------------------------------------------------------------------------------------------------------------------------
+ e1d9c16aa681708a45f5c7c4e215ceb66e011a2e9f0040713f18aefdb866d53cf76cab2868a39b9f7840edce4fef5a82be67335c77a6068e04112754f27ccf4e
+(1 row)
+
+select encode(string2key('pbkdf2-sha512', 'password', 'salt', 4096, 64), 'hex') as s2k;
+                                                               s2k                                                                
+----------------------------------------------------------------------------------------------------------------------------------
+ d197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5
+(1 row)
+
+select encode(string2key('pbkdf2-sha512', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 128), 'hex') as s2k;
+                                                                                                                               s2k                                                                                                                                
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 8c0511f4c6e597c6ac6315d8f0362e225f3c501495ba23b868c005174dc4ee71115b59f9e60cd9532fa33e0f75aefe30225c583a186cd82bd4daea9724a3d3b804f75bdd41494fa324cab24bcc680fb3b96a30cf5d21fac3c2875913919f3399b1d9ce7eb54c95ba49118596cf7465719bbe02c4ecab1b1541298c321d13c6f6
+(1 row)
+
+select encode(string2key('pbkdf2-sha512', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 9d9e9c4cd21fe4be24d5b8244c759665
+(1 row)
+
+--
+-- PBKDF1
+--
+-- http://www.di-mgt.com.au/cryptoKDFs.html
+-- D1F94C4D447039B034494400F2E7DF9DCB67C308
+select encode(string2key('pbkdf1-sha1', 'password', decode('78578E5A5D63CB06', 'hex'), 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ d1f94c4d447039b034494400f2e7df9dcb67c308
+(1 row)
+
+-- 2BB479C1D369EA74BB976BBA2629744E8259C6F5
+select encode(string2key('pbkdf1-sha1', 'password', decode('78578E5A5D63CB06', 'hex'), 2, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 2bb479c1d369ea74bb976bba2629744e8259c6f5
+(1 row)
+
+-- 6663F4611D61571068B5DA168974C6FF2C9775AC
+select encode(string2key('pbkdf1-sha1', 'password', decode('78578E5A5D63CB06', 'hex'), 999, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 6663f4611d61571068b5da168974c6ff2c9775ac
+(1 row)
+
+-- DC19847E05C64D2FAF10EBFB4A3D2A20
+select encode(string2key('pbkdf1-sha1', 'password', decode('78578E5A5D63CB06', 'hex'), 1000, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ dc19847e05c64d2faf10ebfb4a3d2a20
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'password', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ c88e9c67041a74e0357befdff93f87dde0904214
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'password', 'salt', 2, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 47e97e39e2b32b15eb9278e53f7bfca57f8e6b2c
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'password', 'salt', 4096, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 2de33ad2137e4650ea29fb13136f967b0a4508d9
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'passwordPASSWORDpassword', 'saltSALTsaltSALTsaltSALTsaltSALTsalt', 4096, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ ebabf2ef0353667e5581021dd84b1342b6bcc8fa
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', E'pass\\000word'::bytea, E'sa\\000lt'::bytea, 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 2b664b45a9a129dbf2dcb99898347db1
+(1 row)
+
+select encode(string2key('pbkdf1-md5', 'password', 'salt', 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ c8c1ea2f5e2357447ae9244725faabb9
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'password', 'salt', 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 2de33ad2137e4650ea29fb13136f967b
+(1 row)
+
+select encode(string2key('pbkdf1-sha256', 'password', 'salt', 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ beb7ec2415d70c6c9ccdeddb59581117
+(1 row)
+
+select encode(string2key('pbkdf1-sha512', 'password', 'salt', 4096, 16), 'hex') as s2k;
+               s2k                
+----------------------------------
+ 412a2dc289e35a975b8374f1644995f9
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', 'password', '', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', '', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ b295d117135a9763da282e7dae73a5ca7d3e5b11
+(1 row)
+
+select encode(string2key('pbkdf1-sha1', '', '', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ da39a3ee5e6b4b0d3255bfef95601890afd80709
+(1 row)
+
+select encode(string2key('pbkdf1', 'password', 'salt', 1, 20), 'hex') as s2k;
+                   s2k                    
+------------------------------------------
+ c88e9c67041a74e0357befdff93f87dde0904214
+(1 row)
+

@@ -467,3 +467,46 @@ find_provider(text *name,
 
 	return err ? NULL : res;
 }
+
+
+/* SQL function: string_to_key(algo text, psw text, salt text, cnt int4, keylen int4) returns bytea */
+PG_FUNCTION_INFO_V1(pg_string_to_key);
+Datum
+pg_string_to_key(PG_FUNCTION_ARGS)
+{
+	text	   *algo = PG_GETARG_TEXT_PP(0);
+	text	   *psw = PG_GETARG_TEXT_PP(1);
+	text	   *salt = PG_GETARG_TEXT_PP(2);
+	int			rounds = PG_GETARG_INT32(3);
+	int			keylen = PG_GETARG_INT32(4);
+	int			err;
+
+	char	   *algo0;
+	bytea	   *key;
+
+	if (keylen < 1 || keylen > 1024)
+		ereport(ERROR,
+				(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
+				 errmsg("Invalid key length: %d", keylen)));
+
+	key = palloc(VARHDRSZ + keylen);
+	SET_VARSIZE(key, VARHDRSZ + keylen);
+
+	algo0 = text_to_cstring(algo);
+	err = px_string_to_key(algo0,
+						   VARDATA_ANY(psw), VARSIZE_ANY_EXHDR(psw),
+						   VARDATA_ANY(salt), VARSIZE_ANY_EXHDR(salt),
+						   rounds, VARDATA(key), keylen);
+	if (err < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
+				 errmsg("string_to_key error: %s", px_strerror(err))));
+
+	PG_FREE_IF_COPY(algo, 0);
+	PG_FREE_IF_COPY(psw, 1);
+	PG_FREE_IF_COPY(salt, 2);
+	pfree(algo0);
+
+	PG_RETURN_BYTEA_P(key);
+}
+

@@ -250,4 +250,11 @@ void		px_debug(const char *fmt, ...)
 					(c)->decrypt(c, data, dlen, res, rlen)
 #define px_combo_free(c)		(c)->free(c)
 
+
+int px_string_to_key(const char *algo,
+					 const void *psw, int pswlen,
+					 const void *salt, int saltlen,
+					 int count,
+					 void *key, int keylen);
+
 #endif   /* __PX_H */

@@ -36,3 +36,5 @@ ALTER EXTENSION pgcrypto ADD function pgp_pub_decrypt_bytea(bytea,bytea,text,tex
 ALTER EXTENSION pgcrypto ADD function pgp_key_id(bytea);
 ALTER EXTENSION pgcrypto ADD function armor(bytea);
 ALTER EXTENSION pgcrypto ADD function dearmor(text);
+ALTER EXTENSION pgcrypto ADD function string2key(algo text, psw text, salt text, count int4, keylen int4);
+
