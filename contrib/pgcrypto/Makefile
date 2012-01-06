@@ -28,7 +28,7 @@ OBJS		= $(SRCS:.c=.o)
 EXTENSION = pgcrypto
 DATA = pgcrypto--1.0.sql pgcrypto--unpackaged--1.0.sql
 
-REGRESS = init md5 sha1 hmac-md5 hmac-sha1 blowfish rijndael \
+REGRESS = init md5 sha1 hmac-md5 hmac-sha1 hmac-otp blowfish rijndael \
 	$(CF_TESTS) \
 	crypt-des crypt-md5 crypt-blowfish crypt-xdes \
 	string2key \

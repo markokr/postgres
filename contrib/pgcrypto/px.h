@@ -257,4 +257,6 @@ int px_string_to_key(const char *algo,
 					 int count,
 					 void *key, int keylen);
 
+int px_hmac_otp(const void *key, int key_len, uint64 counter, const char *algo, void *res, int reslen);
+
 #endif   /* __PX_H */

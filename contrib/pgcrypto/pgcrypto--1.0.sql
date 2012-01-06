@@ -202,7 +202,7 @@ AS 'MODULE_PATHNAME', 'pg_dearmor'
 LANGUAGE C IMMUTABLE STRICT;
 
 --
--- string2key
+--
 --
 
 CREATE FUNCTION string2key(algo text, psw text, salt text, count int4, keylen int4)
@@ -213,5 +213,15 @@ LANGUAGE C IMMUTABLE STRICT;
 CREATE FUNCTION string2key(algo text, psw bytea, salt bytea, count int4, keylen int4)
 RETURNS bytea
 AS 'MODULE_PATHNAME', 'pg_string_to_key'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hmac_otp(key text, counter int8, algo text, codelen int4)
+RETURNS text
+AS 'MODULE_PATHNAME', 'pg_hmac_otp'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hmac_otp(key bytea, counter int8, algo text, codelen int4)
+RETURNS text
+AS 'MODULE_PATHNAME', 'pg_hmac_otp'
 LANGUAGE C IMMUTABLE STRICT;
 

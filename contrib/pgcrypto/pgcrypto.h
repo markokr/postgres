@@ -46,6 +46,7 @@ Datum		pg_encrypt_iv(PG_FUNCTION_ARGS);
 Datum		pg_decrypt_iv(PG_FUNCTION_ARGS);
 Datum		pg_random_bytes(PG_FUNCTION_ARGS);
 Datum		pg_string_to_key(PG_FUNCTION_ARGS);
+Datum		pg_hmac_otp(PG_FUNCTION_ARGS);
 
 
 #endif

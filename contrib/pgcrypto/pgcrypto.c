@@ -510,3 +510,39 @@ pg_string_to_key(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(key);
 }
 
+/* SQL function: hmac_otp(key bytea, counter int8, algo text, ndigit int4) returns text */
+PG_FUNCTION_INFO_V1(pg_hmac_otp);
+Datum
+pg_hmac_otp(PG_FUNCTION_ARGS)
+{
+	bytea	   *key = PG_GETARG_BYTEA_PP(0);
+	uint64		counter = PG_GETARG_INT32(1);
+	text	   *algo = PG_GETARG_TEXT_PP(2);
+	int			ndigit = PG_GETARG_INT32(3);
+	int			err;
+
+	char	   *algo0;
+	text	   *res;
+
+	if (ndigit < 1 || ndigit > 10)
+		ereport(ERROR,
+				(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
+				 errmsg("Invalid number of digits requested: %d", ndigit)));
+
+	res = palloc(VARHDRSZ + ndigit);
+	SET_VARSIZE(res, VARHDRSZ + ndigit);
+
+	algo0 = text_to_cstring(algo);
+	err = px_hmac_otp(VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key),
+					  counter, algo0, VARDATA(res), ndigit);
+	if (err < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_EXTERNAL_ROUTINE_INVOCATION_EXCEPTION),
+				 errmsg("hmac_otp error: %s", px_strerror(err))));
+
+	PG_FREE_IF_COPY(key, 0);
+	PG_FREE_IF_COPY(algo, 2);
+
+	PG_RETURN_TEXT_P(res);
+}
+

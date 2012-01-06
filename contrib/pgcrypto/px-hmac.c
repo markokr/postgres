@@ -175,3 +175,63 @@ px_find_hmac(const char *name, PX_HMAC **res)
 
 	return 0;
 }
+
+
+int
+px_hmac_otp(const void *key, int key_len, uint64 counter, const char *algo, void *res, int reslen)
+{
+	PX_HMAC *h = NULL;
+	uint8 *hash;
+	uint32 code;
+	int ofs;
+	int hlen;
+	int err;
+	union {
+		uint32 num[2];
+		uint8 bytes[8];
+	} binctr;
+	char resbuf[11];
+
+	/* '10' is max digits for 31-bit integer */
+	if (reslen < 0 || reslen > 10)
+		return PXE_BUG;
+
+	/* load HMAC */
+	err = px_find_hmac(algo, &h);
+	if (err)
+		return err;
+
+	/* HOTP requires at least 20 byte in hash output */
+	hlen = px_hmac_result_size(h);
+	if (hlen < 20) {
+		px_hmac_free(h);
+		return PXE_BUG;
+	}
+
+	/* initialize with key */
+	px_hmac_init(h, key, key_len);
+
+	/* hash counter in big-endian representation */
+	binctr.num[0] = htonl(counter >> 32);
+	binctr.num[1] = htonl(counter);
+	px_hmac_update(h, binctr.bytes, 8);
+
+	hash = px_alloc(hlen);
+	px_hmac_finish(h, hash);
+
+	/* load 31-bit integer from hash */
+	ofs = hash[hlen - 1] & 15;
+	code = (hash[ofs] & 127) << 24;
+	code += hash[ofs + 1] << 16;
+	code += hash[ofs + 2] << 8;
+	code += hash[ofs + 3];
+
+	/* format it */
+	snprintf(resbuf, sizeof(resbuf), "%010u", code);
+	memcpy(res, resbuf + (10 - reslen), reslen);
+
+	px_hmac_free(h);
+	memset(hash, 0, hlen);
+	px_free(hash);
+	return 0;
+}
