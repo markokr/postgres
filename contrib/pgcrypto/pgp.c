@@ -315,6 +315,7 @@ pgp_set_cipher_algo(PGP_Context *ctx, const char *name)
 	if (code < 0)
 		return code;
 	ctx->cipher_algo = code;
+	ctx->custom_cipher = 1;
 	return 0;
 }
 
@@ -362,3 +363,37 @@ pgp_set_symkey(PGP_Context *ctx, const uint8 *key, int len)
 	ctx->sym_key_len = len;
 	return 0;
 }
+
+/* order must match PGP_EC_* constants */
+static const struct PGP_EC_CurveOid ecc_oids[] = {
+/* PGP_EC_NIST_P256 */
+{ 8, { 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07 } },
+/* PGP_EC_NIST_P384 */
+{ 5, { 0x2B, 0x81, 0x04, 0x00, 0x22 } },
+/* PGP_EC_NIST_P521 */
+{ 5, { 0x2B, 0x81, 0x04, 0x00, 0x23 } },
+};
+
+int pgp_find_curve(int len, const uint8 *oid)
+{
+	int i;
+	const struct PGP_EC_CurveOid *ecoid;
+	for (i = 0; i < PGP_EC_NUM_CURVES; i++)
+	{
+		ecoid = ecc_oids + i;
+		if (ecoid->len != len)
+			continue;
+		if (memcmp(ecoid->oid, oid, len) == 0)
+			return i;
+	}
+	return -1;
+}
+
+const struct PGP_EC_CurveOid *
+pgp_get_curve_oid(int curve)
+{
+	if (curve < 0 || curve >= PGP_EC_NUM_CURVES)
+		return NULL;
+	return ecc_oids + curve;
+}
+

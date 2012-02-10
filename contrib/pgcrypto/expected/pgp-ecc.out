@@ -1,0 +1,118 @@
+--
+-- PGP ECDH Public Key Encryption
+--
+-- Test vectors from http://sites.google.com/site/brainhub/pgpecckeys
+--
+\set ECHO off
+select pgp_key_id(dearmor(pubkey)) from keytbl k where k.id = 100;
+    pgp_key_id    
+------------------
+ 77CEB7A34089AB73
+(1 row)
+
+select pgp_key_id(dearmor(seckey)) from keytbl k where k.id = 100;
+    pgp_key_id    
+------------------
+ 77CEB7A34089AB73
+(1 row)
+
+select pgp_key_id(dearmor(data)) from encdata where id = 100;
+    pgp_key_id    
+------------------
+ 77CEB7A34089AB73
+(1 row)
+
+select pgp_key_id(dearmor(pubkey)) from keytbl k where k.id = 102;
+ERROR:  No encryption key found
+select pgp_key_id(dearmor(seckey)) from keytbl k where k.id = 102;
+ERROR:  No encryption key found
+select pgp_key_id(dearmor(pubkey)) from keytbl k where k.id = 103;
+    pgp_key_id    
+------------------
+ AA8B938F9A201946
+(1 row)
+
+select pgp_key_id(dearmor(seckey)) from keytbl k where k.id = 103;
+    pgp_key_id    
+------------------
+ AA8B938F9A201946
+(1 row)
+
+select pgp_key_id(dearmor(data)) from encdata where id = 103;
+    pgp_key_id    
+------------------
+ AA8B938F9A201946
+(1 row)
+
+select pgp_key_id(dearmor(pubkey)) from keytbl k where k.id = 105;
+    pgp_key_id    
+------------------
+ 07EAAA48A81C4838
+(1 row)
+
+select pgp_key_id(dearmor(seckey)) from keytbl k where k.id = 105;
+    pgp_key_id    
+------------------
+ 07EAAA48A81C4838
+(1 row)
+
+select pgp_key_id(dearmor(data)) from encdata where id = 105;
+    pgp_key_id    
+------------------
+ 07EAAA48A81C4838
+(1 row)
+
+select pgp_pub_decrypt_bytea(dearmor(data), dearmor(seckey), 'ecc')
+from keytbl, encdata where keytbl.id=100 and encdata.id=100;
+ pgp_pub_decrypt_bytea 
+-----------------------
+ This is one line\012
+(1 row)
+
+select pgp_pub_decrypt_bytea(dearmor(data), dearmor(seckey), 'ecc')
+from keytbl, encdata where keytbl.id=103 and encdata.id=103;
+ pgp_pub_decrypt_bytea 
+-----------------------
+ This is one line\012
+(1 row)
+
+select pgp_pub_decrypt_bytea(dearmor(data), dearmor(seckey), 'ecc')
+from keytbl, encdata where keytbl.id=105 and encdata.id=105;
+ pgp_pub_decrypt_bytea 
+-----------------------
+ This is one line\012
+(1 row)
+
+insert into encdata (id, data)
+select 201, armor(pgp_pub_encrypt('test with ec256', dearmor(pubkey)))
+  from keytbl k where k.id = 100;
+-- select data from encdata where id = 201;
+select pgp_pub_decrypt(dearmor(data), dearmor(seckey), 'ecc')
+  from keytbl, encdata where keytbl.id=100 and encdata.id=201;
+ pgp_pub_decrypt 
+-----------------
+ test with ec256
+(1 row)
+
+insert into encdata (id, data)
+select 203, armor(pgp_pub_encrypt('test with ec384', dearmor(pubkey)))
+  from keytbl k where k.id = 103;
+-- select data from encdata where id = 203;
+select pgp_pub_decrypt(dearmor(data), dearmor(seckey), 'ecc')
+  from keytbl, encdata where keytbl.id=103 and encdata.id=203;
+ pgp_pub_decrypt 
+-----------------
+ test with ec384
+(1 row)
+
+insert into encdata (id, data)
+select 205, armor(pgp_pub_encrypt('test with ec521', dearmor(pubkey)))
+  from keytbl k where k.id = 105;
+-- select data from encdata where id = 205;
+select pgp_pub_decrypt(dearmor(data), dearmor(seckey), 'ecc')
+  from keytbl, encdata where keytbl.id=105 and encdata.id=205;
+ pgp_pub_decrypt 
+-----------------
+ test with ec521
+(1 row)
+

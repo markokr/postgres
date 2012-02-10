@@ -90,6 +90,8 @@ pgp_mpi_read(PullFilter *src, PGP_MPI **mpi)
 		return res;
 	bits = ((unsigned) hdr[0] << 8) + hdr[1];
 
+	px_debug("pgp_mpi_read: bits=%d", bits);
+
 	res = pgp_mpi_alloc(bits, &n);
 	if (res < 0)
 		return res;

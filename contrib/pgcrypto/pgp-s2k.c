@@ -294,3 +294,68 @@ pgp_s2k_process(PGP_S2K *s2k, int cipher, const uint8 *key, int key_len)
 	px_md_free(md);
 	return res;
 }
+
+/*
+ * Point-to-key derivation function for ECDH.
+ *
+ * Algorithm details are taken from PK.
+ *
+ * outbytes must be <= hash length.
+ */
+int
+pgp_point_kdf(const PGP_PubKey *pk, const PGP_MPI *point, uint8 *out, int outbytes)
+{
+	int res;
+	uint8 hash[PGP_MAX_DIGEST];
+	int hlen;
+	PX_MD *md;
+	const struct PGP_EC_CurveOid *oid;
+
+	/* check if point is valid */
+	if (point->data[0] != 0x04)
+	{
+		px_debug("ec_kdf: invalid point format");
+		return PXE_PGP_KEYPKT_CORRUPT;
+	}
+
+	/* load curve info */
+	oid = pgp_get_curve_oid(pk->pub.ecc.curve);
+	if (!oid)
+		return PXE_PGP_UNKNOWN_PUBALGO;
+
+	/* init hash */
+	res = pgp_load_digest(pk->pub.ecc.kdf_hash, &md);
+	if (res < 0)
+		return res;
+
+	/* hash prefix & point.x */
+	px_md_update(md, "\0\0\0\1", 4);
+	px_md_update(md, point->data + 1, (point->bytes - 1) / 2);
+
+	/* hash params */
+	px_md_update(md, &oid->len, 1);
+	px_md_update(md, oid->oid, oid->len);
+	hash[0] = PGP_PUB_ECDH_ENCRYPT;
+	px_md_update(md, hash, 1);
+	px_md_update(md, pk->pub.ecc.kdf_info, pk->pub.ecc.kdf_infolen);
+	px_md_update(md, "Anonymous Sender    ", 20);
+	px_md_update(md, pk->key_id_full, 12);
+	px_md_update(md, pk->key_id, 8);
+
+	/* get result */
+	px_md_finish(md, hash);
+	hlen = px_md_result_size(md);
+	if (outbytes < 0 || outbytes > hlen)
+		res = PXE_PGP_UNSUPPORTED_HASH;
+	else
+	{
+		memcpy(out, hash, outbytes);
+		res = 0;
+	}
+
+	memset(hash, 0, sizeof(hash));
+	if (md)
+		px_md_free(md);
+	return res;
+}
+

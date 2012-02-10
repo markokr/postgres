@@ -76,6 +76,11 @@ pgp_key_free(PGP_PubKey *pk)
 			pgp_mpi_free(pk->pub.dsa.y);
 			pgp_mpi_free(pk->sec.dsa.x);
 			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+		case PGP_PUB_ECDSA_SIGN:
+			pgp_mpi_free(pk->pub.ecc.rp);
+			pgp_mpi_free(pk->sec.ecc.r);
+			break;
 	}
 	memset(pk, 0, sizeof(*pk));
 	px_free(pk);
@@ -89,6 +94,7 @@ calc_key_id(PGP_PubKey *pk)
 	int			len;
 	uint8		hdr[3];
 	uint8		hash[20];
+	const struct PGP_EC_CurveOid *ecoid;
 
 	res = pgp_load_digest(PGP_DIGEST_SHA1, &md);
 	if (res < 0)
@@ -113,6 +119,14 @@ calc_key_id(PGP_PubKey *pk)
 			len += 2 + pk->pub.dsa.q->bytes;
 			len += 2 + pk->pub.dsa.g->bytes;
 			len += 2 + pk->pub.dsa.y->bytes;
+			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+		case PGP_PUB_ECDSA_SIGN:
+			ecoid = pgp_get_curve_oid(pk->pub.ecc.curve);
+			len += 1 + ecoid->len;
+			len += 2 + pk->pub.ecc.rp->bytes;
+			if (pk->algo == PGP_PUB_ECDH_ENCRYPT)
+				len += pk->pub.ecc.kdf_infolen;
 			break;
 	}
 
@@ -144,11 +158,21 @@ calc_key_id(PGP_PubKey *pk)
 			pgp_mpi_hash(md, pk->pub.dsa.g);
 			pgp_mpi_hash(md, pk->pub.dsa.y);
 			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+		case PGP_PUB_ECDSA_SIGN:
+			ecoid = pgp_get_curve_oid(pk->pub.ecc.curve);
+			px_md_update(md, &ecoid->len, 1);
+			px_md_update(md, ecoid->oid, ecoid->len);
+			pgp_mpi_hash(md, pk->pub.ecc.rp);
+			if (pk->algo == PGP_PUB_ECDH_ENCRYPT)
+				px_md_update(md, pk->pub.ecc.kdf_info, pk->pub.ecc.kdf_infolen);
+			break;
 	}
 
 	px_md_finish(md, hash);
 	px_md_free(md);
 
+	memcpy(pk->key_id_full, hash, 12);
 	memcpy(pk->key_id, hash + 12, 8);
 	memset(hash, 0, 20);
 
@@ -160,6 +184,8 @@ _pgp_read_public_key(PullFilter *pkt, PGP_PubKey **pk_p)
 {
 	int			res;
 	PGP_PubKey *pk;
+	unsigned int xlen;
+	uint8		xbuf[256];
 
 	res = pgp_key_alloc(&pk);
 	if (res < 0)
@@ -232,6 +258,51 @@ _pgp_read_public_key(PullFilter *pkt, PGP_PubKey **pk_p)
 			pk->can_encrypt = 1;
 			break;
 
+		case PGP_PUB_ECDSA_SIGN:
+		case PGP_PUB_ECDH_ENCRYPT:
+			/* <len> <curve oid> */
+			GETBYTE(pkt, xlen);
+			res = pullf_read_fixed(pkt, xlen, xbuf);
+			if (res < 0)
+				break;
+			res = pgp_find_curve(xlen, xbuf);
+			if (res < 0)
+				return res;
+			pk->pub.ecc.curve = res;
+
+			/* public point */
+			res = pgp_mpi_read(pkt, &pk->pub.ecc.rp);
+			if (res < 0)
+				break;
+
+			/* ECDH has extra data: <len> <01> <kdf-hash> <symalgo> */
+			if (pk->algo == PGP_PUB_ECDH_ENCRYPT)
+			{
+				uint8 *info = pk->pub.ecc.kdf_info;
+				res = pullf_read_fixed(pkt, 4, info);
+				if (res < 0)
+					break;
+				if (info[0] != 3) {
+					px_debug("invalid extra info len: %d [ecdh-extra=%d]",
+							 pk->algo, info[0]);
+					res = PXE_PGP_UNSUPPORTED_PUBALGO;
+					break;
+				} else if (info[1] != 0x01) {
+					px_debug("invalid extra info value: %d [ecdh-const=%d]",
+							 pk->algo, info[1]);
+					res = PXE_PGP_UNSUPPORTED_PUBALGO;
+					break;
+				}
+
+				/* load extra info */
+				pk->pub.ecc.kdf_infolen = info[0] + 1;
+				pk->pub.ecc.kdf_hash = info[2];
+				pk->pub.ecc.skey_ciph = info[3];
+				pk->can_encrypt = 1;
+			}
+			res = calc_key_id(pk);
+			break;
+
 		default:
 			px_debug("unknown public algo: %d", pk->algo);
 			res = PXE_PGP_UNKNOWN_PUBALGO;
@@ -281,6 +352,10 @@ check_key_sha1(PullFilter *src, PGP_PubKey *pk)
 		case PGP_PUB_DSA_SIGN:
 			pgp_mpi_hash(md, pk->sec.dsa.x);
 			break;
+		case PGP_PUB_ECDSA_SIGN:
+		case PGP_PUB_ECDH_ENCRYPT:
+			pgp_mpi_hash(md, pk->sec.ecc.r);
+			break;
 	}
 	px_md_finish(md, my_sha1);
 	px_md_free(md);
@@ -324,6 +399,10 @@ check_key_cksum(PullFilter *src, PGP_PubKey *pk)
 			break;
 		case PGP_PUB_DSA_SIGN:
 			my_cksum = pgp_mpi_cksum(0, pk->sec.dsa.x);
+			break;
+		case PGP_PUB_ECDSA_SIGN:
+		case PGP_PUB_ECDH_ENCRYPT:
+			my_cksum = pgp_mpi_cksum(0, pk->sec.ecc.r);
 			break;
 	}
 	if (my_cksum != got_cksum)
@@ -386,7 +465,10 @@ process_secret_key(PullFilter *pkt, PGP_PubKey **pk_p,
 		 */
 		res = pgp_cfb_create(&cfb, cipher_algo, s2k.key, s2k.key_len, 0, iv);
 		if (res < 0)
+		{
+			px_debug("cannot decrypt secret key");
 			return res;
+		}
 		res = pullf_create(&pf_decrypt, &pgp_decrypt_filter, cfb, pkt);
 		if (res < 0)
 			return res;
@@ -426,6 +508,10 @@ process_secret_key(PullFilter *pkt, PGP_PubKey **pk_p,
 			break;
 		case PGP_PUB_DSA_SIGN:
 			res = pgp_mpi_read(pf_key, &pk->sec.dsa.x);
+			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+		case PGP_PUB_ECDSA_SIGN:
+			res = pgp_mpi_read(pf_key, &pk->sec.ecc.r);
 			break;
 		default:
 			px_debug("unknown public algo: %d", pk->algo);
@@ -562,6 +648,7 @@ internal_read_key(PullFilter *src, PGP_PubKey **pk_p,
 	return res;
 }
 
+/* pubtype - 0->public, 1->secret */
 int
 pgp_set_pubkey(PGP_Context *ctx, MBuf *keypkt,
 			   const uint8 *key, int key_len, int pubtype)
@@ -576,9 +663,21 @@ pgp_set_pubkey(PGP_Context *ctx, MBuf *keypkt,
 
 	res = internal_read_key(src, &pk, key, key_len, pubtype);
 	pullf_free(src);
+	if (res < 0)
+		return res;
 
-	if (res >= 0)
-		ctx->pub_key = pk;
+	ctx->pub_key = pk;
 
-	return res < 0 ? res : 0;
+	/* default to recommended ciphers for EC keys */
+	if (pk->algo == PGP_PUB_ECDH_ENCRYPT && !ctx->custom_cipher)
+	{
+		if (pk->pub.ecc.curve == PGP_EC_NIST_P384 ||
+			pk->pub.ecc.curve == PGP_EC_NIST_P521)
+		{
+			/* P384 + AES256 happens to match SuiteB TopSecret level */
+			ctx->cipher_algo = PGP_SYM_AES_256;
+		}
+	}
+
+	return 0;
 }

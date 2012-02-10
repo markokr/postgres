@@ -33,6 +33,7 @@
 #include "px.h"
 #include "mbuf.h"
 #include "pgp.h"
+#include "aeswrap.h"
 
 /*
  * padded msg = 02 || PS || 00 || M
@@ -40,7 +41,7 @@
  * M - msg
  */
 static uint8 *
-check_eme_pkcs1_v15(uint8 *data, int len)
+check_eme_pkcs1_v15(uint8 *data, int len, int *msglen_p)
 {
 	uint8	   *data_end = data + len;
 	uint8	   *p = data;
@@ -64,7 +65,41 @@ check_eme_pkcs1_v15(uint8 *data, int len)
 		return NULL;
 	if (rnd < 8)
 		return NULL;
-	return p + 1;
+	p++;
+	*msglen_p = data_end - p;
+	return p;
+}
+
+/*
+ * padded msg = M || PAD
+ * M - msg
+ * PAD - pad bytes, all equal to pad length
+ */
+static uint8 *
+check_pkcs5_pad(uint8 *data, int len, int *msglen_p)
+{
+	uint8	   *data_end;
+	int			plen;
+	int			i;
+
+	if (len < 8 || (len % 8) != 0)
+		return NULL;
+
+	/* get pad length */
+	plen = data[len - 1];
+	if (plen == 0 || plen >= len)
+		return NULL;
+
+	/* pad bytes must match length */
+	data_end = data + len - plen;
+	for (i = 0; i < plen; i++)
+	{
+		if (data_end[i] != plen)
+			return NULL;
+	}
+
+	*msglen_p = len - plen;
+	return data;
 }
 
 /*
@@ -143,6 +178,77 @@ decrypt_rsa(PGP_PubKey *pk, PullFilter *pkt, PGP_MPI **m_p)
 	return res;
 }
 
+static int
+decrypt_ecdh(PGP_PubKey *pk, PullFilter *pkt, PGP_MPI **m_p)
+{
+	uint8		wlen, zklen;
+	uint8		wbuf[256];
+	uint8		mbuf[256];
+	uint8		zkey[PGP_MAX_KEY];
+	PGP_MPI    *vg = NULL;
+	PGP_MPI    *sp = NULL;
+	PGP_MPI		*m = NULL;
+	int res;
+
+	if (pk->algo != PGP_PUB_ECDH_ENCRYPT)
+		return PXE_PGP_WRONG_KEY;
+
+	/* read public point */
+	res = pgp_mpi_read(pkt, &vg);
+	if (res < 0)
+		goto err;
+
+	/* read wrapped session key */
+	res = pullf_read_fixed(pkt, 1, &wlen);
+	if (res < 0)
+		goto err;
+	if (wlen == 255 || wlen < 16+8)
+		/* reserved or invalid value */
+		goto err;
+	res = pullf_read_fixed(pkt, wlen, wbuf);
+	if (res < 0)
+		goto err;
+
+	/* calculate shared point */
+	res = pgp_ecdh_decrypt(pk, vg, &sp);
+	if (res < 0)
+		goto err;
+
+	/* generate temp key from shared point */
+	res = PXE_PGP_UNSUPPORTED_CIPHER;
+	zklen = pgp_get_cipher_key_size(pk->pub.ecc.skey_ciph);
+	if (!zklen)
+		goto err;
+	res = pgp_point_kdf(pk, sp, zkey, zklen);
+	if (res < 0)
+		goto err;
+
+	/* unwrap session key */
+	res = pgp_mpi_alloc(wlen * 8, &m);
+	if (res < 0)
+		goto err;
+	res = px_aes_unwrap(wbuf, wlen, zkey, zklen, m->data, m->bytes);
+	if (res < 0)
+		goto err;
+
+	/* done, fill correct length */
+	m->bytes = res;
+	m->bits = res * 8;
+	res = 0;
+
+err:
+	pgp_mpi_free(vg);
+	pgp_mpi_free(sp);
+	memset(wbuf, 0, sizeof(wbuf));
+	memset(zkey, 0, sizeof(zkey));
+	memset(mbuf, 0, sizeof(mbuf));
+	if (res == 0)
+		*m_p = m;
+	else
+		pgp_mpi_free(m);
+	return res;
+}
+
 /* key id is missing - user is expected to try all keys */
 static const uint8
 			any_key[] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -157,7 +263,7 @@ pgp_parse_pubenc_sesskey(PGP_Context *ctx, PullFilter *pkt)
 	PGP_PubKey *pk;
 	uint8	   *msg;
 	int			msglen;
-	PGP_MPI    *m;
+	PGP_MPI    *m = NULL;
 
 	pk = ctx->pub_key;
 	if (pk == NULL)
@@ -199,33 +305,46 @@ pgp_parse_pubenc_sesskey(PGP_Context *ctx, PullFilter *pkt)
 		case PGP_PUB_RSA_ENCRYPT_SIGN:
 			res = decrypt_rsa(pk, pkt, &m);
 			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+			res = decrypt_ecdh(pk, pkt, &m);
+			break;
 		default:
 			res = PXE_PGP_UNKNOWN_PUBALGO;
 	}
-	if (res < 0)
+	if (res < 0 || !m)
 		return res;
 
 	/*
 	 * extract message
 	 */
-	msg = check_eme_pkcs1_v15(m->data, m->bytes);
+	if (algo == PGP_PUB_ECDH_ENCRYPT)
+		msg = check_pkcs5_pad(m->data, m->bytes, &msglen);
+	else
+		msg = check_eme_pkcs1_v15(m->data, m->bytes, &msglen);
 	if (msg == NULL)
 	{
-		px_debug("check_eme_pkcs1_v15 failed");
+		px_debug("session key padding failed");
 		res = PXE_PGP_WRONG_KEY;
 		goto out;
 	}
-	msglen = m->bytes - (msg - m->data);
-
-	res = control_cksum(msg, msglen);
-	if (res < 0)
-		goto out;
 
 	/*
 	 * got sesskey
 	 */
 	ctx->cipher_algo = *msg;
-	ctx->sess_key_len = msglen - 3;
+	ctx->sess_key_len = pgp_get_cipher_key_size(ctx->cipher_algo);
+
+	if (!ctx->sess_key_len || (int)ctx->sess_key_len != (msglen - 3))
+	{
+		px_debug("invalid cipher or key in key pkt (ciph:%d skey:%d)",
+				 ctx->cipher_algo, ctx->sess_key_len);
+		return PXE_PGP_KEYPKT_CORRUPT;
+	}
+
+	res = control_cksum(msg, msglen);
+	if (res < 0)
+		goto out;
+
 	memcpy(ctx->sess_key, msg + 1, ctx->sess_key_len);
 
 out:

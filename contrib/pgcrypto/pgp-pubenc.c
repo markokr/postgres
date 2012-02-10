@@ -33,6 +33,7 @@
 #include "px.h"
 #include "mbuf.h"
 #include "pgp.h"
+#include "aeswrap.h"
 
 /*
  * padded msg: 02 || non-zero pad bytes || 00 || msg
@@ -136,6 +137,37 @@ create_secmsg(PGP_Context *ctx, PGP_MPI **msg_p, int full_bytes)
 }
 
 static int
+create_secmsg_ec(const PGP_Context *ctx, const PGP_PubKey *pk, uint8 *dst, int dlen)
+{
+	int			i;
+	int			pos;
+	int			padlen;
+	unsigned	cksum = 0;
+	int			klen = ctx->sess_key_len;
+
+	if (dlen < klen + 3 + 8)
+		return -1;
+
+	/* calc checksum */
+	for (i = 0; i < klen; i++)
+		cksum += ctx->sess_key[i];
+
+	/* put data in */
+	dst[0] = ctx->cipher_algo;
+	memcpy(dst + 1, ctx->sess_key, klen);
+	dst[klen + 1] = (cksum >> 8) & 0xFF;
+	dst[klen + 2] = cksum & 0xFF;
+
+	/* fill pad */
+	pos = klen + 3;
+	padlen = (8 - (pos % 8));
+	for (i = 0; i < padlen; i++)
+		dst[pos + i] = padlen;
+
+	return pos + padlen;
+}
+
+static int
 encrypt_and_write_elgamal(PGP_Context *ctx, PGP_PubKey *pk, PushFilter *pkt)
 {
 	int			res;
@@ -192,6 +224,72 @@ err:
 	return res;
 }
 
+static int
+encrypt_and_write_ecdh(PGP_Context *ctx, PGP_PubKey *pk, PushFilter *pkt)
+{
+	int			res;
+	int			zklen;
+	uint8		zkey[PGP_MAX_KEY];
+	uint8		mbuf[PGP_MAX_KEY + 3 + 8];
+	uint8		wbuf[PGP_MAX_KEY + 3 + 8 + 8];
+	uint8 wlen;
+	int mlen;
+	PGP_MPI	   *vg = NULL,
+			   *sp = NULL;
+
+	/* disallow weak key hiding algorithms */
+	if (pk->pub.ecc.skey_ciph < PGP_SYM_AES_128 ||
+		pk->pub.ecc.kdf_hash < PGP_DIGEST_SHA256)
+	{
+		px_debug("encrypt_and_write_ecdh: refusing to use invalid key");
+		res = PXE_PGP_UNSUPPORTED_PUBALGO;
+		goto err;
+	}
+
+	/* generate shared point */
+	res = pgp_ecdh_encrypt(pk, &vg, &sp);
+	if (res < 0)
+		goto err;
+
+	/* generate temp key from shared point */
+	zklen = pgp_get_cipher_key_size(pk->pub.ecc.skey_ciph);
+	res = PXE_PGP_UNSUPPORTED_CIPHER;
+	if (zklen < 16)
+		goto err;
+	res = pgp_point_kdf(pk, sp, zkey, zklen);
+	if (res < 0)
+		goto err;
+
+	/* create padded msg */
+	res = create_secmsg_ec(ctx, pk, mbuf, sizeof(mbuf));
+	if (res < 0)
+		goto err;
+	mlen = res;
+
+	/* use aes-wrap on that */
+	res = px_aes_wrap(mbuf, mlen, zkey, zklen, wbuf, sizeof(wbuf));
+	if (res < 0)
+		goto err;
+	wlen = res;
+
+	/* write out */
+	res = pgp_mpi_write(pkt, vg);
+	if (res < 0)
+		goto err;
+	res = pushf_write(pkt, &wlen, 1);
+	if (res < 0)
+		goto err;
+	res = pushf_write(pkt, wbuf, wlen);
+
+err:
+	pgp_mpi_free(vg);
+	pgp_mpi_free(sp);
+	memset(zkey, 0, sizeof(zkey));
+	memset(mbuf, 0, sizeof(mbuf));
+	memset(wbuf, 0, sizeof(wbuf));
+	return res;
+}
+
 int
 pgp_write_pubenc_sesskey(PGP_Context *ctx, PushFilter *dst)
 {
@@ -234,6 +332,11 @@ pgp_write_pubenc_sesskey(PGP_Context *ctx, PushFilter *dst)
 		case PGP_PUB_RSA_ENCRYPT_SIGN:
 			res = encrypt_and_write_rsa(ctx, pk, pkt);
 			break;
+		case PGP_PUB_ECDH_ENCRYPT:
+			res = encrypt_and_write_ecdh(ctx, pk, pkt);
+			break;
+		default:
+			res = PXE_PGP_UNSUPPORTED_PUBALGO;
 	}
 	if (res < 0)
 		goto err;

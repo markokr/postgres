@@ -64,7 +64,18 @@ enum PGP_PUB_ALGO_TYPE
 	PGP_PUB_RSA_ENCRYPT = 2,
 	PGP_PUB_RSA_SIGN = 3,
 	PGP_PUB_ELG_ENCRYPT = 16,
-	PGP_PUB_DSA_SIGN = 17
+	PGP_PUB_DSA_SIGN = 17,
+	PGP_PUB_ECDH_ENCRYPT = 18,
+	PGP_PUB_ECDSA_SIGN = 19
+};
+
+/* internal map of EC curves */
+enum PGP_PUB_EC_CURVE
+{
+	PGP_EC_NIST_P256 = 0,
+	PGP_EC_NIST_P384 = 1,
+	PGP_EC_NIST_P521 = 2,
+	PGP_EC_NUM_CURVES = 3
 };
 
 enum PGP_SYMENC_TYPE
@@ -160,6 +171,8 @@ struct PGP_Context
 	const uint8 *sym_key;		/* ctx does not own it */
 	int			sym_key_len;
 
+	int			custom_cipher;	/* user changed cipher */
+
 	/*
 	 * read or generated data
 	 */
@@ -201,6 +214,18 @@ struct PGP_PubKey
 			PGP_MPI    *g;
 			PGP_MPI    *y;
 		}			dsa;
+		struct
+		{
+			PGP_MPI	   *rp;
+			uint8		curve;
+
+			/* raw kdf fields */
+			uint8		kdf_info[4];
+			/* extracted kdf values */
+			uint8		kdf_infolen;
+			uint8		kdf_hash;
+			uint8		skey_ciph;
+		}			ecc;
 	}			pub;
 
 	/* secret part */
@@ -221,10 +246,20 @@ struct PGP_PubKey
 		{
 			PGP_MPI    *x;
 		}			dsa;
+		struct
+		{
+			PGP_MPI	   *r;
+		}			ecc;
 	}			sec;
 
+	uint8		key_id_full[20-8];
 	uint8		key_id[8];
 	int			can_encrypt;
+};
+
+struct PGP_EC_CurveOid {
+	uint8 len;
+	uint8 oid[8];
 };
 
 int			pgp_init(PGP_Context **ctx);
@@ -314,4 +349,13 @@ int pgp_elgamal_decrypt(PGP_PubKey *pk, PGP_MPI *c1, PGP_MPI *c2,
 int			pgp_rsa_encrypt(PGP_PubKey *pk, PGP_MPI *m, PGP_MPI **c);
 int			pgp_rsa_decrypt(PGP_PubKey *pk, PGP_MPI *c, PGP_MPI **m);
 
+int			pgp_ecdh_encrypt(const PGP_PubKey *pk, PGP_MPI **vg, PGP_MPI **sp);
+int			pgp_ecdh_decrypt(const PGP_PubKey *pk, const PGP_MPI *vg, PGP_MPI **sp);
+
+int			pgp_find_curve(int len, const uint8 *oid);
+const struct PGP_EC_CurveOid *pgp_get_curve_oid(int curve);
+
+int			pgp_point_kdf(const PGP_PubKey *pk, const PGP_MPI *point, uint8 *out, int outbytes);
+
 extern const struct PullFilterOps pgp_decrypt_filter;
+

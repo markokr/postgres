@@ -20,7 +20,7 @@ SRCS		= pgcrypto.c px.c px-hmac.c px-crypt.c string2key.c \
 		mbuf.c pgp.c pgp-armor.c pgp-cfb.c pgp-compress.c \
 		pgp-decrypt.c pgp-encrypt.c pgp-info.c pgp-mpi.c \
 		pgp-pubdec.c pgp-pubenc.c pgp-pubkey.c pgp-s2k.c \
-		pgp-pgsql.c
+		pgp-pgsql.c aeswrap.c
 
 MODULE_big	= pgcrypto
 OBJS		= $(SRCS:.c=.o)
@@ -33,7 +33,7 @@ REGRESS = init md5 sha1 hmac-md5 hmac-sha1 hmac-otp blowfish rijndael \
 	crypt-des crypt-md5 crypt-blowfish crypt-xdes crypt-sha2 \
 	string2key \
 	pgp-armor pgp-decrypt pgp-encrypt $(CF_PGP_TESTS) \
-	pgp-pubkey-decrypt pgp-pubkey-encrypt pgp-info
+	pgp-pubkey-decrypt pgp-pubkey-encrypt pgp-info pgp-ecc
 
 # camellia works only on OpenSSL 1.0+
 #REGRESS += pgp-camellia

@@ -31,6 +31,8 @@
 #include "postgres.h"
 
 #include <openssl/bn.h>
+#include <openssl/ec.h>
+#include <openssl/obj_mac.h>
 
 #include "px.h"
 #include "mbuf.h"
@@ -283,3 +285,270 @@ err:
 		BN_clear_free(c);
 	return res;
 }
+
+
+/*
+ * ECDH - Elliptic Curve Diffie-Hellman
+ */
+
+
+static EC_GROUP *
+load_curve(const PGP_PubKey *pk)
+{
+	int nid;
+
+	/* pick openssl curve oid */
+	switch (pk->pub.ecc.curve)
+	{
+		case PGP_EC_NIST_P256:
+			nid = NID_X9_62_prime256v1;
+			break;
+		case PGP_EC_NIST_P384:
+			nid = NID_secp384r1;
+			break;
+		case PGP_EC_NIST_P521:
+			nid = NID_secp521r1;
+			break;
+		default:
+			return NULL;
+	}
+
+	return EC_GROUP_new_by_curve_name(nid);
+}
+
+/*
+ * Load point from PGP_MPI.
+ *
+ * Values are stored in MPI data with following format:
+ *
+ *   04 || x || y
+ *
+ * Both x and y are same, fixed length for particular curve (256/384/521+7).
+ *
+ * OpenSSL supports 0x04 format natively, also the input routines check whether
+ * bignum size is valid and whether the point is actually on curve.  So no need
+ * to do such checks here.
+ */
+
+static EC_POINT *
+mpi_to_point(const EC_GROUP *eg, const PGP_MPI *n, BN_CTX *ctx)
+{
+	EC_POINT *p;
+	int res;
+
+	if (n->data[0] != 0x04)
+	{
+		px_debug("Invalid MPI point format (need:4, got=%d)", n->data[0]);
+		return NULL;
+	}
+
+	p = EC_POINT_new(eg);
+	if (!p)
+		return NULL;
+
+	res = EC_POINT_oct2point(eg, p, n->data, n->bytes, ctx);
+	if (!res)
+	{
+		EC_POINT_free(p);
+		return NULL;
+	}
+
+	return p;
+}
+
+static PGP_MPI *
+point_to_mpi(const EC_GROUP *eg, const EC_POINT *p, BN_CTX *ctx)
+{
+	int			res;
+	PGP_MPI    *n;
+	int			bytes;
+	int			bits;
+
+	/* bytes in one element */
+	bytes = (EC_GROUP_get_degree(eg) + 7) / 8;
+
+	/* bits in final number */
+	bits = 3 + 2*8*bytes;
+
+	res = pgp_mpi_alloc(bits, &n);
+	if (res < 0)
+		return NULL;
+	res = EC_POINT_point2oct(eg, p, POINT_CONVERSION_UNCOMPRESSED,
+							 n->data, n->bytes, ctx);
+	if (!res || n->data[0] != 0x04 || res != n->bytes)
+	{
+		pgp_mpi_free(n);
+		return NULL;
+	}
+
+	return n;
+}
+
+/*
+ * Quick overview of ECDH:
+ *
+ * You have given a 'group' of points with 'add' and 'multiply' operations.
+ * Pre-existing information:   (Lower-case is integer, upper-case is point.)
+ *
+ *   G - pre-defined point in group
+ *   r - private key (random number)
+ *   R - public key (R = rG)
+ *
+ * On encryption, session keypair is generated:
+ *
+ *   v - random number
+ *   V - public point (V = vG), will be put into message
+ *
+ * that is used to calculate shared secret point:
+ *
+ *   S = vR = vrG
+ *
+ * On decryption, public point V and private key r
+ * are used to calculate S:
+ *
+ *   S = rV = rvG
+ */
+
+int
+pgp_ecdh_encrypt(const PGP_PubKey *pk, PGP_MPI **vg_p, PGP_MPI **sp_p)
+{
+	int			res = PXE_PGP_MATH_FAILED;
+	EC_GROUP *eg = NULL;
+	EC_POINT *vg = NULL;
+	EC_POINT *sp = NULL;
+	EC_POINT *r = NULL;
+	const EC_POINT *g;
+	BN_CTX	   *ctx;
+	BIGNUM	   *v = NULL;
+	BIGNUM	   *n = NULL;
+	int			vbits;
+
+	eg = load_curve(pk);
+	ctx = BN_CTX_new();
+	v = BN_new();
+	n = BN_new();
+	if (!ctx || !v || !n || !eg)
+		goto err;
+
+	/* get group order */
+	if (!EC_GROUP_get_order(eg, n, ctx))
+		goto err;
+
+	/* get base point */
+	g = EC_GROUP_get0_generator(eg);
+	if (!g)
+		goto err;
+
+	/* load other values */
+	sp = EC_POINT_new(eg);
+	vg = EC_POINT_new(eg);
+	if (!g || !sp || !vg)
+		goto err;
+	r = mpi_to_point(eg, pk->pub.ecc.rp, ctx);
+	if (!r)
+	{
+		res = PXE_PGP_KEYPKT_CORRUPT;
+		goto err;
+	}
+
+	/* create session private key */
+	vbits = EC_GROUP_get_degree(eg);
+	do
+	{
+		/* generate value without top bit set */
+		if (!BN_rand(v, vbits, -1, 0))
+			goto err;
+		/* it must be in range 0 < v < n */
+	} while (BN_cmp(v, n) >= 0 ||
+			 BN_cmp(v, BN_value_one()) < 0);
+
+	/* create session public key */
+	if (!EC_POINT_mul(eg, vg, NULL, g, v, ctx))
+		goto err;
+
+	/* create shared point */
+	if (!EC_POINT_mul(eg, sp, NULL, r, v, ctx))
+		goto err;
+
+	/* convert result */
+	*vg_p = point_to_mpi(eg, vg, ctx);
+	if (!*vg_p)
+		goto err;
+	*sp_p = point_to_mpi(eg, sp, ctx);
+	if (!*sp_p)
+	{
+		pgp_mpi_free(*vg_p);
+		*vg_p = NULL;
+		goto err;
+	}
+	res = 0;
+
+err:
+	if (vg)
+		EC_POINT_clear_free(vg);
+	if (sp)
+		EC_POINT_clear_free(sp);
+	if (r)
+		EC_POINT_clear_free(r);
+	if (n)
+		BN_clear_free(n);
+	if (v)
+		BN_clear_free(v);
+	if (ctx)
+		BN_CTX_free(ctx);
+	if (eg)
+		EC_GROUP_clear_free(eg);
+	return res;
+}
+
+int
+pgp_ecdh_decrypt(const PGP_PubKey *pk, const PGP_MPI *_vg, PGP_MPI **sp_p)
+{
+	int			res = PXE_PGP_MATH_FAILED;
+	EC_GROUP *eg = NULL;
+	EC_POINT *vg = NULL;
+	EC_POINT *sp = NULL;
+	BIGNUM		*r = NULL;
+	BN_CTX	   *ctx = NULL;
+
+	eg = load_curve(pk);
+	if (!eg)
+		goto err;
+	ctx = BN_CTX_new();
+	r = mpi_to_bn(pk->sec.ecc.r);
+	sp = EC_POINT_new(eg);
+	if (!ctx || !r || !sp)
+		goto err;
+
+	/* session public key, comes from data */
+	vg = mpi_to_point(eg, _vg, ctx);
+	if (!vg)
+	{
+		px_debug("invalid point in packet");
+		res = PXE_PGP_KEYPKT_CORRUPT;
+		goto err;
+	}
+
+	/* create shared secret */
+	if (!EC_POINT_mul(eg, sp, NULL, vg, r, ctx))
+		goto err;
+
+	/* convert result */
+	*sp_p = point_to_mpi(eg, sp, ctx);
+	if (*sp_p)
+		res = 0;
+
+err:
+	if (vg)
+		EC_POINT_clear_free(vg);
+	if (sp)
+		EC_POINT_clear_free(sp);
+	if (r)
+		BN_clear_free(r);
+	if (ctx)
+		BN_CTX_free(ctx);
+	if (eg)
+		EC_GROUP_clear_free(eg);
+	return res;
+}
+

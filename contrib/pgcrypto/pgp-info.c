@@ -55,6 +55,7 @@ read_pubkey_keyid(PullFilter *pkt, uint8 *keyid_buf)
 		case PGP_PUB_ELG_ENCRYPT:
 		case PGP_PUB_RSA_ENCRYPT:
 		case PGP_PUB_RSA_ENCRYPT_SIGN:
+		case PGP_PUB_ECDH_ENCRYPT:
 			memcpy(keyid_buf, pk->key_id, 8);
 			res = 1;
 			break;
