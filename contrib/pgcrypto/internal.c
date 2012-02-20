@@ -40,6 +40,8 @@
 #include "rijndael.h"
 #include "fortuna.h"
 
+#include <openssl/cast.h>
+
 /*
  * System reseeds should be separated at least this much.
  */
@@ -251,6 +253,7 @@ struct int_ctx
 	{
 		BlowfishContext bf;
 		rijndael_ctx rj;
+		CAST_KEY c5;
 	}			ctx;
 	int			mode;
 };
@@ -505,6 +508,122 @@ bf_load(int mode)
 	return c;
 }
 
+/*
+ * cast5
+ */
+
+static unsigned
+c5_block_size(PX_Cipher *c)
+{
+	return 8;
+}
+
+static unsigned
+c5_key_size(PX_Cipher *c)
+{
+	return 128 / 8;
+}
+
+static unsigned
+c5_iv_size(PX_Cipher *c)
+{
+	return 8;
+}
+
+static int
+c5_init(PX_Cipher *c, const uint8 *key, unsigned klen, const uint8 *iv, int enc)
+{
+	struct int_ctx *cx = (struct int_ctx *) c->ptr;
+
+	CAST_set_key(&cx->ctx.c5, klen, key);
+	if (iv)
+		memcpy(cx->iv, iv, 8);
+
+	return 0;
+}
+
+static int
+c5_encrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res)
+{
+	struct int_ctx *cx = (struct int_ctx *) c->ptr;
+	CAST_KEY *key = &cx->ctx.c5;
+	int i;
+
+	if (dlen == 0)
+		return 0;
+
+	if (dlen & 7)
+		return PXE_NOTBLOCKSIZE;
+
+	if (cx->mode == MODE_ECB)
+	{
+		for (i = 0; i < dlen / 8; i++)
+		{
+			CAST_ecb_encrypt(data, res, key, 1);
+			data += 8;
+			res += 8;
+		}
+	}
+	else
+	{
+		CAST_cbc_encrypt(data, res, dlen, key, cx->iv, 1);
+	}
+	return 0;
+}
+
+static int
+c5_decrypt(PX_Cipher *c, const uint8 *data, unsigned dlen, uint8 *res)
+{
+	struct int_ctx *cx = (struct int_ctx *) c->ptr;
+	CAST_KEY *key = &cx->ctx.c5;
+	int i;
+
+	if (dlen == 0)
+		return 0;
+
+	if (dlen & 7)
+		return PXE_NOTBLOCKSIZE;
+
+	if (cx->mode == MODE_ECB)
+	{
+		for (i = 0; i < dlen / 8; i++)
+		{
+			CAST_ecb_encrypt(data, res, key, 0);
+			data += 8;
+			res += 8;
+		}
+	}
+	else
+	{
+		CAST_cbc_encrypt(data, res, dlen, key, cx->iv, 0);
+	}
+	return 0;
+}
+
+static PX_Cipher *
+c5_load(int mode)
+{
+	PX_Cipher  *c;
+	struct int_ctx *cx;
+
+	c = px_alloc(sizeof *c);
+	memset(c, 0, sizeof *c);
+
+	c->block_size = c5_block_size;
+	c->key_size = c5_key_size;
+	c->iv_size = c5_iv_size;
+	c->init = c5_init;
+	c->encrypt = c5_encrypt;
+	c->decrypt = c5_decrypt;
+	c->free = intctx_free;
+
+	cx = px_alloc(sizeof *cx);
+	memset(cx, 0, sizeof *cx);
+	cx->mode = mode;
+	c->ptr = cx;
+	return c;
+}
+
 /* ciphers */
 
 static PX_Cipher *
@@ -531,6 +650,18 @@ bf_cbc_load(void)
 	return bf_load(MODE_CBC);
 }
 
+static PX_Cipher *
+c5_ecb_load(void)
+{
+	return c5_load(MODE_ECB);
+}
+
+static PX_Cipher *
+c5_cbc_load(void)
+{
+	return c5_load(MODE_CBC);
+}
+
 struct int_cipher
 {
 	char	   *name;
@@ -543,6 +674,9 @@ static const struct int_cipher
 	{"bf-ecb", bf_ecb_load},
 	{"aes-128-cbc", rj_128_cbc},
 	{"aes-128-ecb", rj_128_ecb},
+	{"cast5-ecb", c5_ecb_load},
+	{"cast5-cbc", c5_cbc_load},
+	{"cast5", c5_cbc_load},
 	{NULL, NULL}
 };
 
