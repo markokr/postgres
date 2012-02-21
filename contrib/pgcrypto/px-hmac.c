@@ -92,7 +92,7 @@ hmac_reset(PX_HMAC *h)
 }
 
 static void
-hmac_update(PX_HMAC *h, const uint8 *data, unsigned dlen)
+hmac_update(PX_HMAC *h, const void *data, unsigned dlen)
 {
 	px_md_update(h->md, data, dlen);
 }

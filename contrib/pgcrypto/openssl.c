@@ -111,7 +111,7 @@ digest_reset(PX_MD *h)
 }
 
 static void
-digest_update(PX_MD *h, const uint8 *data, unsigned dlen)
+digest_update(PX_MD *h, const void *data, unsigned dlen)
 {
 	OSSLDigest *digest = (OSSLDigest *) h->p.ptr;
 

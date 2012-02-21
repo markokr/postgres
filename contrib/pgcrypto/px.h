@@ -122,7 +122,7 @@ struct px_digest
 	unsigned	(*result_size) (PX_MD *h);
 	unsigned	(*block_size) (PX_MD *h);
 	void		(*reset) (PX_MD *h);
-	void		(*update) (PX_MD *h, const uint8 *data, unsigned dlen);
+	void		(*update) (PX_MD *h, const void *data, unsigned dlen);
 	void		(*finish) (PX_MD *h, uint8 *dst);
 	void		(*free) (PX_MD *h);
 	/* private */
@@ -144,7 +144,7 @@ struct px_hmac
 	unsigned	(*result_size) (PX_HMAC *h);
 	unsigned	(*block_size) (PX_HMAC *h);
 	void		(*reset) (PX_HMAC *h);
-	void		(*update) (PX_HMAC *h, const uint8 *data, unsigned dlen);
+	void		(*update) (PX_HMAC *h, const void *data, unsigned dlen);
 	void		(*finish) (PX_HMAC *h, uint8 *dst);
 	void		(*free) (PX_HMAC *h);
 	void		(*init) (PX_HMAC *h, const uint8 *key, unsigned klen);

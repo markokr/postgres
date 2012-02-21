@@ -114,7 +114,7 @@ int_md5_block_len(PX_MD *h)
 }
 
 static void
-int_md5_update(PX_MD *h, const uint8 *data, unsigned dlen)
+int_md5_update(PX_MD *h, const void *data, unsigned dlen)
 {
 	MD5_CTX    *ctx = (MD5_CTX *) h->p.ptr;
 
@@ -162,7 +162,7 @@ int_sha1_block_len(PX_MD *h)
 }
 
 static void
-int_sha1_update(PX_MD *h, const uint8 *data, unsigned dlen)
+int_sha1_update(PX_MD *h, const void *data, unsigned dlen)
 {
 	SHA1_CTX   *ctx = (SHA1_CTX *) h->p.ptr;
 
