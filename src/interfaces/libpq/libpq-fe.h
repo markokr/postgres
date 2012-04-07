@@ -90,7 +90,8 @@ typedef enum
 								 * backend */
 	PGRES_NONFATAL_ERROR,		/* notice or warning message */
 	PGRES_FATAL_ERROR,			/* query failed */
-	PGRES_COPY_BOTH				/* Copy In/Out data transfer in progress */
+	PGRES_COPY_BOTH,			/* Copy In/Out data transfer in progress */
+	PGRES_SINGLE_TUPLE			/* PGresult for single tuple from bigger resultset */
 } ExecStatusType;
 
 typedef enum
@@ -128,17 +129,6 @@ typedef struct pg_conn PGconn;
  * The contents of this struct are not supposed to be known to applications.
  */
 typedef struct pg_result PGresult;
-
-/* PGdataValue represents a data field value being passed to a row processor.
- * It could be either text or binary data; text data is not zero-terminated.
- * A SQL NULL is represented by len < 0; then value is still valid but there
- * are no data bytes there.
- */
-typedef struct pgDataValue
-{
-	int			len;			/* data length in bytes, or <0 if NULL */
-	const char *value;			/* data value, without zero-termination */
-} PGdataValue;
 
 /* PGcancel encapsulates the information needed to cancel a running
  * query on an existing connection.
@@ -405,6 +395,8 @@ extern int PQsendQueryPrepared(PGconn *conn,
 					int resultFormat);
 extern PGresult *PQgetResult(PGconn *conn);
 extern PGresult *PQskipResult(PGconn *conn);
+
+extern int PQsetSingleRowMode(PGconn *conn);
 
 /* Routines for managing an asynchronous query */
 extern int	PQisBusy(PGconn *conn);

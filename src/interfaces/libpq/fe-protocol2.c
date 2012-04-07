@@ -943,6 +943,15 @@ getAnotherTuple(PGconn *conn, bool binary)
 	 */
 	conn->inStart = conn->inCursor;
 
+	/*
+	 * On single-row processing, show that row is available.
+	 */
+	if (conn->singleRowMode)
+	{
+		conn->asyncStatus = PGASYNC_ROW_READY;
+		return EOF;
+	}
+
 	/* Pass the completed row values to rowProcessor */
 	errmsg = NULL;
 	switch ((*conn->rowProcessor) (result, rowbuf, &errmsg,

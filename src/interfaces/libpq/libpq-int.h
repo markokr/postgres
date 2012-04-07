@@ -219,7 +219,8 @@ typedef enum
 	PGASYNC_READY,				/* result ready for PQgetResult */
 	PGASYNC_COPY_IN,			/* Copy In data transfer in progress */
 	PGASYNC_COPY_OUT,			/* Copy Out data transfer in progress */
-	PGASYNC_COPY_BOTH			/* Copy In/Out data transfer in progress */
+	PGASYNC_COPY_BOTH,			/* Copy In/Out data transfer in progress */
+	PGASYNC_ROW_READY			/* single-row result ready for PQgetResult */
 } PGAsyncStatusType;
 
 /* PGQueryClass tracks which query protocol we are now executing */
@@ -276,6 +277,17 @@ typedef struct pgLobjfuncs
 	Oid			fn_lo_read;		/* OID of backend function LOread		*/
 	Oid			fn_lo_write;	/* OID of backend function LOwrite		*/
 } PGlobjfuncs;
+
+/* PGdataValue represents a data field value being passed to a row processor.
+ * It could be either text or binary data; text data is not zero-terminated.
+ * A SQL NULL is represented by len < 0; then value is still valid but there
+ * are no data bytes there.
+ */
+typedef struct pgDataValue
+{
+	int			len;			/* data length in bytes, or <0 if NULL */
+	const char *value;			/* data value, without zero-termination */
+} PGdataValue;
 
 /*
  * PGconn stores all the state data associated with a single connection
@@ -406,6 +418,9 @@ struct pg_conn
 
 	/* Status for asynchronous result construction */
 	PGresult   *result;			/* result being constructed */
+
+	/* process result row-by-row */
+	bool singleRowMode;
 
 	/* Assorted state for SSL, GSS, etc */
 

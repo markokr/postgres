@@ -1344,6 +1344,9 @@ PQsendQueryStart(PGconn *conn)
 	/* initialize async result-accumulation state */
 	conn->result = NULL;
 
+	/* reset single-row processing */
+	conn->singleRowMode = false;
+
 	/* ready to send command message */
 	return true;
 }
@@ -1548,6 +1551,97 @@ pqHandleSendFailure(PGconn *conn)
 }
 
 /*
+ * Set row-by-row processing mode.
+ */
+int
+PQsetSingleRowMode(PGconn *conn)
+{
+	/*
+	 * avoid setting the flag in inappropriate time
+	 */
+
+	if (!conn)
+		return 0;
+	if (conn->asyncStatus != PGASYNC_BUSY)
+		return 0;
+	if (conn->queryclass != PGQUERY_SIMPLE && conn->queryclass != PGQUERY_EXTENDED)
+		return 0;
+	if (conn->result)
+		return 0;
+
+	/* set flag */
+	conn->singleRowMode = true;
+	return 1;
+}
+
+/*
+ * Create result that contains current row pointed by rowBuf.
+ */
+static PGresult *
+pqSingleRowResult(PGconn *conn)
+{
+	PGresult		*res;
+	const char		*errmsg = NULL;
+
+	/* Copy row header */
+	res = PQcopyResult(conn->result, PG_COPYRES_ATTRS);
+	if (!res)
+		goto nomem;
+
+	/* Set special status */
+	res->resultStatus = PGRES_SINGLE_TUPLE;
+
+	/*
+	 * Use callback to fill the row.
+	 */
+
+	switch ((*conn->rowProcessor) (res, conn->rowBuf, &errmsg,
+								   conn->rowProcessorParam))
+	{
+		case 1:
+			/* everything is good */
+			return res;
+
+		case -1:
+			/* error, report the errmsg below */
+			break;
+
+		default:
+			/* unrecognized return code */
+			errmsg = libpq_gettext("unrecognized return value from row processor");
+			break;
+	}
+
+	/* free copied PGresult */
+	PQclear(res);
+
+nomem:
+
+	/*
+	 * Replace partially constructed result with an error result. First
+	 * discard the old result to try to win back some memory.
+	 */
+	pqClearAsyncResult(conn);
+
+	/*
+	 * If row processor didn't provide an error message, assume "out of
+	 * memory" was meant.  The advantage of having this special case is that
+	 * freeing the old result first greatly improves the odds that gettext()
+	 * will succeed in providing a translation.
+	 */
+	if (!errmsg)
+		errmsg = libpq_gettext("out of memory for query result");
+
+	printfPQExpBuffer(&conn->errorMessage, "%s\n", errmsg);
+	pqSaveErrorResult(conn);
+
+	/*
+	 * Fall back to standard PQgetResult() behaviour
+	 */
+	return pqPrepareAsyncResult(conn);
+}
+
+/*
  * Consume any available input from the backend
  * 0 return: some kind of trouble
  * 1 return: no problem
@@ -1594,6 +1688,10 @@ PQconsumeInput(PGconn *conn)
 static void
 parseInput(PGconn *conn)
 {
+	/* special case: there is data to parse, but we must not do it yet. */
+	if (conn->asyncStatus == PGASYNC_ROW_READY)
+		return;
+
 	if (PG_PROTOCOL_MAJOR(conn->pversion) >= 3)
 		pqParseInput3(conn);
 	else
@@ -1681,6 +1779,12 @@ PQgetResult(PGconn *conn)
 			break;
 		case PGASYNC_READY:
 			res = pqPrepareAsyncResult(conn);
+			/* Set the state back to BUSY, allowing parsing to proceed. */
+			conn->asyncStatus = PGASYNC_BUSY;
+			break;
+		case PGASYNC_ROW_READY:
+			/* return copy of current row */
+			res = pqSingleRowResult(conn);
 			/* Set the state back to BUSY, allowing parsing to proceed. */
 			conn->asyncStatus = PGASYNC_BUSY;
 			break;
@@ -2524,6 +2628,9 @@ PQfn(PGconn *conn,
 						  libpq_gettext("connection in wrong state\n"));
 		return NULL;
 	}
+
+	/* reset single row mode */
+	conn->singleRowMode = false;
 
 	if (PG_PROTOCOL_MAJOR(conn->pversion) >= 3)
 		return pqFunctionCall3(conn, fnid,
