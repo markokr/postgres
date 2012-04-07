@@ -4018,6 +4018,75 @@ PGresult *PQgetResult(PGconn *conn);
       </note>
      </listitem>
     </varlistentry>
+
+    <varlistentry id="libpq-pqsetsinglerowmode">
+     <term>
+      <function>PQsetSingleRowMode</function>
+      <indexterm>
+       <primary>PQsetSingleRowMode</primary>
+      </indexterm>
+     </term>
+
+     <listitem>
+      <para>
+       Instead buffering all rows in <structname>PGresult</structname>
+       until full resultset has arrived, this changes resultset processing
+       to return rows as soon as they arrive from network.
+
+<synopsis>
+int PQsetSingleRowMode(PGconn *conn);
+</synopsis>
+      </para>
+
+      <para>
+       The mode can be changed directly after
+       <function>PQsendQuery</function>,
+       <function>PQsendQueryParams</function>,
+       <function>PQsendQueryPrepared</function> call, and before
+       any result rows have arrived from network.  Then this functions
+       changes mode and returns 1.  Otherwise the mode stays unchanged
+       and this functions returns 0.
+      </para>
+
+      <para>
+       The rows returned have PQresultStatus() of <literal>PGRES_SINGLE_TUPLE</literal>.
+       There will be final PGresult that has either <literal>PGRES_TUPLES_OK</literal>
+       or <literal>PGRES_FATAL_ERROR</literal> result status.  In case
+       of error status, the actual query failed in the middle and received rows
+       should be dropped.
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+    <varlistentry id="libpq-pqgetrowdata">
+     <term>
+      <function>PQgetRowData</function>
+      <indexterm>
+       <primary>PQgetRowData</primary>
+      </indexterm>
+     </term>
+
+     <listitem>
+      <para>
+       In single row mode it is possible to get row data directly,
+       without constructing <structname>PGresult</structname> for
+       each row.
+
+<synopsis>
+int PQgetRowData(PGconn *conn, PGresult **hdr, PGdataValue **columns);
+</synopsis>
+      </para>
+
+      <para>
+       It can be called everywhere <function>PQgetResult</function> can.
+       It returns 1 and fills pointers if there is row data avilable.
+       It returns 0 otherwise.  Then <function>PQgetResult</function>
+       should be called to get final status.
+      </para>
+     </listitem>
+    </varlistentry>
+
    </variablelist>
   </para>
 
