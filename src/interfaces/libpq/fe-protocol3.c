@@ -580,25 +580,7 @@ getRowDescriptions(PGconn *conn, int msgLength)
 		return 0;
 	}
 
-	/* Give the row processor a chance to initialize for new result set */
-	errmsg = NULL;
-	switch ((*conn->rowProcessor) (result, NULL, &errmsg,
-								   conn->rowProcessorParam))
-	{
-		case 1:
-			/* everything is good */
-			return 0;
-
-		case -1:
-			/* error, report the errmsg below */
-			break;
-
-		default:
-			/* unrecognized return code */
-			errmsg = libpq_gettext("unrecognized return value from row processor");
-			break;
-	}
-	goto set_error_result;
+	return 0;
 
 advance_and_error:
 	/* Discard unsaved result, if any */
@@ -608,8 +590,6 @@ advance_and_error:
 	/* Discard the failed message by pretending we read it */
 	conn->inStart += 5 + msgLength;
 
-set_error_result:
-
 	/*
 	 * Replace partially constructed result with an error result. First
 	 * discard the old result to try to win back some memory.
@@ -617,8 +597,7 @@ set_error_result:
 	pqClearAsyncResult(conn);
 
 	/*
-	 * If row processor didn't provide an error message, assume "out of
-	 * memory" was meant.
+	 * NULL means "out of memory".
 	 */
 	if (!errmsg)
 		errmsg = libpq_gettext("out of memory for query result");
@@ -793,24 +772,11 @@ getAnotherTuple(PGconn *conn, int msgLength)
 		return EOF;
 	}
 
-	/* Pass the completed row values to rowProcessor */
+	/* Process the completed row values */
+	if (pqRowProcessor(result, rowbuf))
+		return 0;
+
 	errmsg = NULL;
-	switch ((*conn->rowProcessor) (result, rowbuf, &errmsg,
-								   conn->rowProcessorParam))
-	{
-		case 1:
-			/* everything is good */
-			return 0;
-
-		case -1:
-			/* error, report the errmsg below */
-			break;
-
-		default:
-			/* unrecognized return code */
-			errmsg = libpq_gettext("unrecognized return value from row processor");
-			break;
-	}
 	goto set_error_result;
 
 advance_and_error:

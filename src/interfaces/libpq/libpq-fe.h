@@ -162,10 +162,6 @@ typedef struct pgNotify
 	struct pgNotify *next;		/* list link */
 } PGnotify;
 
-/* Function type for row-processor callback */
-typedef int (*PQrowProcessor) (PGresult *res, const PGdataValue *columns,
-										   const char **errmsgp, void *param);
-
 /* Function types for notice-handling callbacks */
 typedef void (*PQnoticeReceiver) (void *arg, const PGresult *res);
 typedef void (*PQnoticeProcessor) (void *arg, const char *message);
@@ -405,7 +401,6 @@ extern int PQsendQueryPrepared(PGconn *conn,
 					const int *paramFormats,
 					int resultFormat);
 extern PGresult *PQgetResult(PGconn *conn);
-extern PGresult *PQskipResult(PGconn *conn);
 
 extern int PQsetSingleRowMode(PGconn *conn);
 extern int PQgetRowData(PGconn *conn, PGresult **hdrp, PGdataValue **columns);
@@ -413,10 +408,6 @@ extern int PQgetRowData(PGconn *conn, PGresult **hdrp, PGdataValue **columns);
 /* Routines for managing an asynchronous query */
 extern int	PQisBusy(PGconn *conn);
 extern int	PQconsumeInput(PGconn *conn);
-
-/* Override default per-row processing */
-extern void PQsetRowProcessor(PGconn *conn, PQrowProcessor func, void *param);
-extern PQrowProcessor PQgetRowProcessor(const PGconn *conn, void **param);
 
 /* LISTEN/NOTIFY support */
 extern PGnotify *PQnotifies(PGconn *conn);

@@ -325,10 +325,6 @@ struct pg_conn
 	/* Optional file to write trace info to */
 	FILE	   *Pfdebug;
 
-	/* Callback procedure for per-row processing */
-	PQrowProcessor rowProcessor;	/* function pointer */
-	void	   *rowProcessorParam;		/* passthrough argument */
-
 	/* Callback procedures for notice message processing */
 	PGNoticeHooks noticeHooks;
 
@@ -401,8 +397,8 @@ struct pg_conn
 								 * msg has no length word */
 	int			outMsgEnd;		/* offset to msg end (so far) */
 
-	/* Row processor interface workspace */
-	PGdataValue *rowBuf;		/* array for passing values to rowProcessor */
+	/* Row processing workspace */
+	PGdataValue *rowBuf;		/* array for column values */
 	int			rowBufLen;		/* number of entries allocated in rowBuf */
 
 	/* Status for asynchronous result construction */
@@ -506,6 +502,7 @@ extern pgthreadlock_t pg_g_threadlock;
 
 /* === in fe-exec.c === */
 
+extern int pqRowProcessor(PGresult *res, const PGdataValue *columns);
 extern void pqSetResultError(PGresult *res, const char *msg);
 extern void pqCatenateResultError(PGresult *res, const char *msg);
 extern void *pqResultAlloc(PGresult *res, size_t nBytes, bool isBinary);
