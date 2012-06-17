@@ -70,6 +70,10 @@ typedef struct storeInfo
 	AttInMetadata *attinmeta;
 	MemoryContext tmpcontext;
 	char	  **cstrs;
+
+	/* temp storage for results to avoid leaks on exception */
+	PGresult *last_res;
+	PGresult *cur_res;
 } storeInfo;
 
 /*
@@ -83,8 +87,8 @@ static void materializeQueryResult(FunctionCallInfo fcinfo,
 					   const char *conname,
 					   const char *sql,
 					   bool fail);
-static int storeHandler(PGresult *res, const PGdataValue *columns,
-			 const char **errmsgp, void *param);
+static PGresult *queryToStore(storeInfo *sinfo, PGconn *conn, const char *sql);
+static void storeRow(storeInfo *sinfo, PGresult *res, bool first);
 static remoteConn *getConnectionByName(const char *name);
 static HTAB *createConnHash(void);
 static void createNewConnection(const char *name, remoteConn *rconn);
@@ -950,13 +954,8 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 		memset(&sinfo, 0, sizeof(sinfo));
 		sinfo.fcinfo = fcinfo;
 
-		/* We'll collect tuples using storeHandler */
-		PQsetRowProcessor(conn, storeHandler, &sinfo);
-
-		res = PQexec(conn, sql);
-
-		/* We don't keep the custom row processor installed permanently */
-		PQsetRowProcessor(conn, NULL, NULL);
+		/* We'll collect tuples into tuplestore */
+		res = queryToStore(&sinfo, conn, sql);
 
 		if (!res ||
 			(PQresultStatus(res) != PGRES_COMMAND_OK &&
@@ -1017,40 +1016,84 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 
 			PQclear(res);
 		}
+		PQclear(sinfo.last_res);
+		PQclear(sinfo.cur_res);
 	}
 	PG_CATCH();
 	{
-		/* be sure to unset the custom row processor */
-		PQsetRowProcessor(conn, NULL, NULL);
 		/* be sure to release any libpq result we collected */
-		if (res)
-			PQclear(res);
+		PQclear(res);
+		PQclear(sinfo.last_res);
+		PQclear(sinfo.cur_res);
 		/* and clear out any pending data in libpq */
-		while ((res = PQskipResult(conn)) != NULL)
+		while ((res = PQgetResult(conn)) != NULL)
 			PQclear(res);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 }
 
-/*
- * Custom row processor for materializeQueryResult.
- * Prototype of this function must match PQrowProcessor.
- */
-static int
-storeHandler(PGresult *res, const PGdataValue *columns,
-			 const char **errmsgp, void *param)
+static PGresult *
+queryToStore(storeInfo *sinfo, PGconn *conn, const char *sql)
 {
-	storeInfo  *sinfo = (storeInfo *) param;
+	bool first = true;
+	PGresult *res;
+
+	if (!PQsendQuery(conn, sql))
+		return PQgetResult(conn);
+
+	if (!PQsetSingleRowMode(conn))
+		elog(ERROR, "dblink: failed to set single-row mode");
+
+	while (1)
+	{
+		CHECK_FOR_INTERRUPTS();
+
+		sinfo->cur_res = PQgetResult(conn);
+		if (!sinfo->cur_res)
+			break;
+
+		if (PQresultStatus(sinfo->cur_res) == PGRES_SINGLE_TUPLE)
+		{
+			/* got one row from bigger resultset */
+			storeRow(sinfo, sinfo->cur_res, first);
+
+			PQclear(sinfo->cur_res);
+			sinfo->cur_res = NULL;
+			first = false;
+		}
+		else
+		{
+			/* fill tupstore header for empty resultset */
+			if (first && PQresultStatus(sinfo->cur_res) == PGRES_TUPLES_OK)
+				storeRow(sinfo, sinfo->cur_res, first);
+
+			/* store it at ->last_rest */
+			PQclear(sinfo->last_res);
+			sinfo->last_res = sinfo->cur_res;
+			sinfo->cur_res = NULL;
+			first = true;
+		}
+	}
+
+	/* return ->last_res */
+	res = sinfo->last_res;
+	sinfo->last_res = NULL;
+	return res;
+}
+
+/*
+ * Send single row to tuple store.
+ */
+static void
+storeRow(storeInfo *sinfo, PGresult *res, bool first)
+{
 	int			nfields = PQnfields(res);
-	char	  **cstrs = sinfo->cstrs;
 	HeapTuple	tuple;
-	char	   *pbuf;
-	int			pbuflen;
 	int			i;
 	MemoryContext oldcontext;
 
-	if (columns == NULL)
+	if (first)
 	{
 		/* Prepare for new result set */
 		ReturnSetInfo *rsinfo = (ReturnSetInfo *) sinfo->fcinfo->resultinfo;
@@ -1105,6 +1148,10 @@ storeHandler(PGresult *res, const PGdataValue *columns,
 		rsinfo->setDesc = tupdesc;
 		MemoryContextSwitchTo(oldcontext);
 
+		/* stop if empty resultset */
+		if (PQntuples(res) == 0)
+			return;
+
 		/*
 		 * Set up sufficiently-wide string pointers array; this won't change
 		 * in size so it's easy to preallocate.
@@ -1122,10 +1169,7 @@ storeHandler(PGresult *res, const PGdataValue *columns,
 									  ALLOCSET_DEFAULT_INITSIZE,
 									  ALLOCSET_DEFAULT_MAXSIZE);
 
-		return 1;
 	}
-
-	CHECK_FOR_INTERRUPTS();
 
 	/*
 	 * Do the following work in a temp context that we reset after each tuple.
@@ -1135,46 +1179,24 @@ storeHandler(PGresult *res, const PGdataValue *columns,
 	oldcontext = MemoryContextSwitchTo(sinfo->tmpcontext);
 
 	/*
-	 * The strings passed to us are not null-terminated, but the datatype
-	 * input functions we're about to call require null termination.  Copy the
-	 * strings and add null termination.  As a micro-optimization, allocate
-	 * all the strings with one palloc.
+	 * Fill cstrs with null-terminated strings of column values.
 	 */
-	pbuflen = nfields;			/* count the null terminators themselves */
 	for (i = 0; i < nfields; i++)
 	{
-		int			len = columns[i].len;
-
-		if (len > 0)
-			pbuflen += len;
-	}
-	pbuf = (char *) palloc(pbuflen);
-
-	for (i = 0; i < nfields; i++)
-	{
-		int			len = columns[i].len;
-
-		if (len < 0)
-			cstrs[i] = NULL;
+		if (PQgetisnull(res, 0, i))
+			sinfo->cstrs[i] = NULL;
 		else
-		{
-			cstrs[i] = pbuf;
-			memcpy(pbuf, columns[i].value, len);
-			pbuf += len;
-			*pbuf++ = '\0';
-		}
+			sinfo->cstrs[i] = PQgetvalue(res, 0, i);
 	}
 
 	/* Convert row to a tuple, and add it to the tuplestore */
-	tuple = BuildTupleFromCStrings(sinfo->attinmeta, cstrs);
+	tuple = BuildTupleFromCStrings(sinfo->attinmeta, sinfo->cstrs);
 
 	tuplestore_puttuple(sinfo->tuplestore, tuple);
 
 	/* Clean up */
 	MemoryContextSwitchTo(oldcontext);
 	MemoryContextReset(sinfo->tmpcontext);
-
-	return 1;
 }
 
 /*
