@@ -59,7 +59,7 @@ lo_open(PGconn *conn, Oid lobjId, int mode)
 	PQArgBlock	argv[2];
 	PGresult   *res;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -101,7 +101,7 @@ lo_close(PGconn *conn, int fd)
 	int			retval;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -139,7 +139,7 @@ lo_truncate(PGconn *conn, int fd, size_t len)
 	int			retval;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -192,7 +192,7 @@ lo_read(PGconn *conn, int fd, char *buf, size_t len)
 	PGresult   *res;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -234,7 +234,7 @@ lo_write(PGconn *conn, int fd, const char *buf, size_t len)
 	int			result_len;
 	int			retval;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -280,7 +280,7 @@ lo_lseek(PGconn *conn, int fd, int offset, int whence)
 	int			retval;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -328,7 +328,7 @@ lo_creat(PGconn *conn, int mode)
 	int			retval;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return InvalidOid;
@@ -367,7 +367,7 @@ lo_create(PGconn *conn, Oid lobjId)
 	int			retval;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return InvalidOid;
@@ -413,7 +413,7 @@ lo_tell(PGconn *conn, int fd)
 	PGresult   *res;
 	int			result_len;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -451,7 +451,7 @@ lo_unlink(PGconn *conn, Oid lobjId)
 	int			result_len;
 	int			retval;
 
-	if (conn->lobjfuncs == NULL)
+	if (conn == NULL || conn->lobjfuncs == NULL)
 	{
 		if (lo_initialize(conn) < 0)
 			return -1;
@@ -505,7 +505,7 @@ lo_import_with_oid(PGconn *conn, const char *filename, Oid lobjId)
 }
 
 static Oid
-lo_import_internal(PGconn *conn, const char *filename, const Oid oid)
+lo_import_internal(PGconn *conn, const char *filename, Oid oid)
 {
 	int			fd;
 	int			nbytes,
@@ -685,6 +685,9 @@ lo_initialize(PGconn *conn)
 	const char *query;
 	const char *fname;
 	Oid			foid;
+
+	if (!conn)
+		return -1;
 
 	/*
 	 * Allocate the structure to hold the functions OID's
