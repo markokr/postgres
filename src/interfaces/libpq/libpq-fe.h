@@ -90,7 +90,8 @@ typedef enum
 								 * backend */
 	PGRES_NONFATAL_ERROR,		/* notice or warning message */
 	PGRES_FATAL_ERROR,			/* query failed */
-	PGRES_COPY_BOTH				/* Copy In/Out data transfer in progress */
+	PGRES_COPY_BOTH,			/* Copy In/Out data transfer in progress */
+	PGRES_SINGLE_TUPLE			/* PGresult for single tuple from bigger resultset */
 } ExecStatusType;
 
 typedef enum
@@ -389,6 +390,8 @@ extern int PQsendQueryPrepared(PGconn *conn,
 					const int *paramFormats,
 					int resultFormat);
 extern PGresult *PQgetResult(PGconn *conn);
+
+extern int PQsetSingleRowMode(PGconn *conn);
 
 /* Routines for managing an asynchronous query */
 extern int	PQisBusy(PGconn *conn);

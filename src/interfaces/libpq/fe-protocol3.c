@@ -401,6 +401,10 @@ pqParseInput3(PGconn *conn)
 		{
 			/* Normal case: parsing agrees with specified length */
 			conn->inStart = conn->inCursor;
+
+			/* should we exit early? */
+			if (conn->asyncStatus == PGASYNC_ROW_READY)
+				return;
 		}
 		else
 		{
@@ -693,6 +697,12 @@ getAnotherTuple(PGconn *conn, int msgLength)
 		goto outOfMemory;
 	/* and reset for a new message */
 	conn->curTuple = NULL;
+
+	/*
+	 * On single-row processing, show that row is available.
+	 */
+	if (conn->singleRowMode)
+		conn->asyncStatus = PGASYNC_ROW_READY;
 
 	return 0;
 

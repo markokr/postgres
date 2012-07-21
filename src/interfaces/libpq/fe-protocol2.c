@@ -621,6 +621,10 @@ pqParseInput2(PGconn *conn)
 		}
 		/* Successfully consumed this message */
 		conn->inStart = conn->inCursor;
+
+		/* should we exit early? */
+		if (conn->asyncStatus == PGASYNC_ROW_READY)
+			return;
 	}
 }
 
@@ -819,6 +823,13 @@ getAnotherTuple(PGconn *conn, bool binary)
 
 	if (bitmap != std_bitmap)
 		free(bitmap);
+
+	/*
+	 * On single-row processing, show that row is available.
+	 */
+	if (conn->singleRowMode)
+		conn->asyncStatus = PGASYNC_ROW_READY;
+
 	return 0;
 
 outOfMemory:
