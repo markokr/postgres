@@ -161,3 +161,4 @@ PQping                    158
 PQpingParams              159
 PQlibVersion              160
 PQsetSingleRowMode        161
+PQgetRowData              162

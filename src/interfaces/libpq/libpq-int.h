@@ -278,17 +278,6 @@ typedef struct pgLobjfuncs
 	Oid			fn_lo_write;	/* OID of backend function LOwrite		*/
 } PGlobjfuncs;
 
-/* PGdataValue represents a data field value being passed to a row processor.
- * It could be either text or binary data; text data is not zero-terminated.
- * A SQL NULL is represented by len < 0; then value is still valid but there
- * are no data bytes there.
- */
-typedef struct pgDataValue
-{
-	int			len;			/* data length in bytes, or <0 if NULL */
-	const char *value;			/* data value, without zero-termination */
-} PGdataValue;
-
 /*
  * PGconn stores all the state data associated with a single connection
  * to a backend.

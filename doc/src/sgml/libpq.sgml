@@ -4059,6 +4059,34 @@ int PQsetSingleRowMode(PGconn *conn);
      </listitem>
     </varlistentry>
 
+    <varlistentry id="libpq-pqgetrowdata">
+     <term>
+      <function>PQgetRowData</function>
+      <indexterm>
+       <primary>PQgetRowData</primary>
+      </indexterm>
+     </term>
+
+     <listitem>
+      <para>
+       In single row mode it is possible to get row data directly,
+       without constructing <structname>PGresult</structname> for
+       each row.
+
+<synopsis>
+int PQgetRowData(PGconn *conn, PGresult **hdr, PGdataValue **columns);
+</synopsis>
+      </para>
+
+      <para>
+       It can be called everywhere <function>PQgetResult</function> can.
+       It returns 1 and fills pointers if there is row data avilable.
+       It returns 0 otherwise.  Then <function>PQgetResult</function>
+       should be called to get final status.
+      </para>
+     </listitem>
+    </varlistentry>
+
    </variablelist>
   </para>
 

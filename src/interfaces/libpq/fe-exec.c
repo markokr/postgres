@@ -1555,6 +1555,75 @@ nomem:
 }
 
 /*
+ * Get raw row data from network buffer.
+ *
+ * It duplicates the flush/read logic of PQgetResult() to be able
+ * to work on sync connection.  It does not return any error state,
+ * instead it leaves that to actual PQgetResult().
+ *
+ *		Returns: 1 - have row data, 0 - do not have it
+ */
+int
+PQgetRowData(PGconn *conn, PGresult **hdrp, PGdataValue **cols)
+{
+	if (!conn)
+		return 0;
+
+	/* Parse any available data, if our state permits. */
+	parseInput(conn);
+
+	/* If not ready to return something, block until we are. */
+	while (conn->asyncStatus == PGASYNC_BUSY)
+	{
+		int			flushResult;
+
+		/*
+		 * If data remains unsent, send it.  Else we might be waiting for the
+		 * result of a command the backend hasn't even got yet.
+		 */
+		while ((flushResult = pqFlush(conn)) > 0)
+		{
+			if (pqWait(FALSE, TRUE, conn))
+			{
+				flushResult = -1;
+				break;
+			}
+		}
+
+		/* Wait for some more data, and load it. */
+		if (flushResult ||
+			pqWait(TRUE, FALSE, conn) ||
+			pqReadData(conn) < 0)
+		{
+			/*
+			 * conn->errorMessage has been set by pqWait or pqReadData. We
+			 * want to append it to any already-received error message.
+			 */
+			pqSaveErrorResult(conn);
+
+			/* Make PQgetResult() return the error */
+			conn->asyncStatus = PGASYNC_READY;
+			break;
+		}
+
+		/* Parse it. */
+		parseInput(conn);
+	}
+
+	/* should PQgetResult() be called instead? */
+	if (conn->asyncStatus != PGASYNC_ROW_READY)
+		return 0;
+
+	/* allow parsing to proceed */
+	conn->asyncStatus = PGASYNC_BUSY;
+
+	/* return pointers to current row */
+	*hdrp = conn->result;
+	*cols = conn->rowBuf;
+	return 1;
+}
+
+/*
  * Consume any available input from the backend
  * 0 return: some kind of trouble
  * 1 return: no problem
