@@ -1520,7 +1520,7 @@ pqSingleRowResult(PGconn *conn)
 	const char		*errmsg = NULL;
 
 	/* Copy row header */
-	res = PQcopyResult(conn->result, PG_COPYRES_ATTRS);
+	res = PQcopyResult(conn->result, PG_COPYRES_ATTRS | PG_COPYRES_EVENTS | PG_COPYRES_NOTICEHOOKS);
 	if (!res)
 		goto nomem;
 
