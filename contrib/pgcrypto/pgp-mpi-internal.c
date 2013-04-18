@@ -874,19 +874,36 @@ failed:
 
 /* repeat 'combine' operation n times */
 static int
-ec_point_mul(struct EcGroup *eg, struct EcPoint *p, mpz_t *n, struct EcPoint *res)
+ec_point_mul(struct EcGroup *eg, struct EcPoint *p, mpz_t *_n, struct EcPoint *res)
 {
 	int bits;
-	struct EcPoint *tmp = NULL;
+	struct EcPoint *tmp;
+	mpz_t *n;
 	int i;
 	int rc;
 
-	bits = mp_int_count_bits(n);
-
 	rc = MP_MEMORY;
+	n = mp_new();
 	tmp = ec_point_new();
-	if (!tmp)
+	if (!tmp || !n)
 		goto failed;
+
+	/*
+	 * Create equivalent n with fixed bit-length.
+	 */
+	rc = mp_int_copy(_n, n);
+	if (rc != MP_OK)
+		goto failed;
+	rc = mp_int_add(n, eg->p, n);
+	if (rc != MP_OK)
+		goto failed;
+	bits = mp_int_count_bits(n);
+	if (bits <= eg->bits) {
+		rc = mp_int_add(n, eg->p, n);
+		if (rc != MP_OK)
+			goto failed;
+		bits = mp_int_count_bits(n);
+	}
 
 	/*
 	 * Montgomery ladder - binary multiplication in fixed time.
@@ -909,10 +926,12 @@ ec_point_mul(struct EcGroup *eg, struct EcPoint *p, mpz_t *n, struct EcPoint *re
 		}
 	}
 
+	mp_clear_free(n);
 	ec_point_free(tmp);
 	return MP_OK;
 
 failed:
+	mp_clear_free(n);
 	ec_point_free(tmp);
 	px_debug("ec_point_mul failed: %d", rc);
 	return rc;
