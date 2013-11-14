@@ -3144,7 +3144,7 @@ static struct config_string ConfigureNamesString[] =
 		},
 		&SSLCipherSuites,
 #ifdef USE_SSL
-		"DEFAULT:!LOW:!EXP:!MD5:@STRENGTH",
+		"HIGH:!aNULL",
 #else
 		"none",
 #endif
